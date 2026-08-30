@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import api from "../../lib/api";
-import { Download, X, Search, Filter, Plus, Eye, Edit2, MoreHorizontal, Building2, Flame, CheckCircle, GraduationCap, Users, Trash2, Upload, MapPin } from "lucide-react";
+import { Download, X, Search, Filter, Plus, Eye, Edit2, Building2, Flame, CheckCircle, GraduationCap, Users, Trash2, Upload, MapPin } from "lucide-react";
 
 interface KanbanCard {
   id: string;
@@ -52,7 +52,6 @@ const getStatusDot = (status: string) => {
 };
 
 export function RecruiterPipeline() {
-  const navigate = useNavigate();
   const [workflow, setWorkflow] = useState<TeamWorkflow | null>(null);
   
   const [showPlacedModal, setShowPlacedModal] = useState(false);
@@ -124,7 +123,6 @@ export function RecruiterPipeline() {
   const { role } = useOutletContext<{ role: string }>();
   const isAdmin = role === "admin"; 
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   const fetchWorkflow = () => {
@@ -225,14 +223,6 @@ export function RecruiterPipeline() {
         fetchWorkflow();
       })
       .catch(err => console.error("Error updating company:", err));
-  };
-
-  const handleDeleteCompany = (id: string) => {
-    if(window.confirm("Are you sure you want to delete this company?")) {
-      api.delete(`/companies/${id}`)
-        .then(() => fetchWorkflow())
-        .catch(err => console.error("Error deleting company", err));
-    }
   };
 
   const downloadExcel = () => {
@@ -436,7 +426,7 @@ export function RecruiterPipeline() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedCompanies.map((company, index) => (
+              {paginatedCompanies.map((company) => (
                 <tr key={company.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-4 py-4 font-bold text-slate-800 flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs text-blue-600">

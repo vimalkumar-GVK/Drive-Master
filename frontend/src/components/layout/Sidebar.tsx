@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { 
   LayoutDashboard, Users, UserSquare2, Building2, 
   FileBarChart2, Sparkles, Briefcase, 
-  CheckCircle2, PlusCircle, Award, LogOut, ArrowLeftRight
+  CheckCircle2, PlusCircle, Award, LogOut
 } from "lucide-react";
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {

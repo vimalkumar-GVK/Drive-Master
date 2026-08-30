@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { 
   Sparkles, Briefcase, FileText, CheckCircle2, AlertCircle, 
   TrendingUp, MapPin, Calendar, 
@@ -58,7 +58,7 @@ export function StudentDashboard() {
     status: "Eligible for All Tier-1 Drives"
   };
 
-  const { data: jobs = [], refetch: refetchJobs } = useQuery<Job[]>({
+  const { data: jobs = [] } = useQuery<Job[]>({
     queryKey: ['jobs'],
     queryFn: async () => {
       const res = await fetch("http://localhost:8000/api/v1/jobs");

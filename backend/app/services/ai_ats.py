@@ -96,7 +96,7 @@ def evaluate_resume_with_gemini(job_description: str, resume_text: str) -> dict:
             prompt = f"<JOB_DESCRIPTION>\n{job_description}\n</JOB_DESCRIPTION>\n\n<CANDIDATE_RESUME>\n{resume_text}\n</CANDIDATE_RESUME>"
             
             response = client.models.generate_content(
-                model="gemini-1.5-flash",
+                model="gemini-3.6-flash",
                 contents=prompt,
                 config=genai.types.GenerateContentConfig(
                     system_instruction=ATS_SYSTEM_PROMPT,

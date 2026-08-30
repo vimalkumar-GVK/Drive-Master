@@ -84,7 +84,7 @@ export function StudentList() {
   const [activeTab, setActiveTab] = useState<"directory" | "trash" | "ats">("directory");
   const [students, setStudents] = useState<Student[]>([]);
   const [trashedStudents, setTrashedStudents] = useState<Student[]>([]);
-  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [companies] = useState<{ id: string; name: string }[]>([]);
   const [atsAnalysis, setAtsAnalysis] = useState<AtsAnalysis[]>([]);
   const processingAtsRef = useRef<Set<string>>(new Set());
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -314,7 +314,6 @@ export function StudentList() {
     }
   };
 
-  const selectedCompanyName = companies.find(c => c.id === selectedCompanyId)?.name || "MICROSOFT";
 
   return (
     <div className="relative pb-12 space-y-8">

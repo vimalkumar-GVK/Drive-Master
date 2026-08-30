@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 import api from "../../lib/api";
-import { Users, X, Edit2, Trash2 } from "lucide-react";
+import { Users } from "lucide-react";
 
 interface MetricsData {
   student_info: {
@@ -62,24 +62,12 @@ const getRoleBadge = (role: string) => {
 };
 
 export function AdminDashboard() {
-  const location = useLocation();
   const [data, setData] = useState<MetricsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
-
-  const isAdmin = true;
-  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-  const [showEditMemberModal, setShowEditMemberModal] = useState(false);
-  const [editingEmail, setEditingEmail] = useState("");
-  const [formData, setFormData] = useState({
-    full_name: "",
-    email: "",
-    password: "",
-    role: "Manager"
-  });
 
   const fetchMetrics = async () => {
     try {

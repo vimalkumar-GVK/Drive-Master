@@ -6,8 +6,7 @@ import { StudentList } from './pages/admin/StudentList';
 import { TeamManagement } from './pages/admin/TeamManagement';
 import { RecruiterPipeline } from './pages/admin/RecruiterPipeline';
 import { Reports } from './pages/admin/Reports';
-import { StudentDashboard } from './pages/student/StudentDashboard';
-import { RecruiterDashboard } from './pages/recruiter/RecruiterDashboard';
+
 import { Login } from './pages/Login';
 import { LandingPage } from './pages/LandingPage';
 

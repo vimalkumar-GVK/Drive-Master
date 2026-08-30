@@ -16,3 +16,4 @@ pandas
 scikit-learn
 PyPDF2
 requests
+sentence-transformers
