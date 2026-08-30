@@ -920,13 +920,15 @@ export function TeamManagement() {
                           >
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
-                          <button 
-                            onClick={() => handleDeleteMember(member.email)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-md transition-colors"
-                            title="Delete Member"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {member.email !== 'admin@gmail.com' && (
+                            <button 
+                              onClick={() => handleDeleteMember(member.email)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-md transition-colors"
+                              title="Delete Member"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
                       <div className="mt-4 flex items-center justify-between">

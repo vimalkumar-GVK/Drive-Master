@@ -27,10 +27,10 @@ async def get_team_members(current_user: UserInDB = Depends(require_role([RoleEn
     return {
         "members": [
             {
-                "name": u.get("name", "Unknown"),
+                "name": u.get("full_name", u.get("name", "Unknown")),
                 "email": u.get("email", ""),
                 "role": u.get("role", ""),
-                "avatar": u.get("avatar_url", "https://api.dicebear.com/7.x/initials/svg?seed=" + u.get("name", "U"))
+                "avatar": u.get("avatar_url", "https://api.dicebear.com/7.x/initials/svg?seed=" + u.get("full_name", u.get("name", "U")))
             } for u in users
         ]
     }
