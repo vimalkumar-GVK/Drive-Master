@@ -14,6 +14,8 @@ from app.api.companies import router as companies_router
 from app.api.history import router as history_router
 import os
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,9 +52,25 @@ app.include_router(history_router, prefix="/api/v1/history", tags=["History"])
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-@app.get("/")
-def root():
-    return {"message": "Welcome to Placement AI API"}
+# Serve the frontend statically
+frontend_path = Path(__file__).parent.parent / "static"
+if frontend_path.exists():
+    app.mount("/assets", StaticFiles(directory=frontend_path / "assets"), name="assets")
+    
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # Ignore API routes
+        if full_path.startswith("api/"):
+            return {"error": "API route not found"}
+            
+        file_path = frontend_path / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(frontend_path / "index.html")
+else:
+    @app.get("/")
+    def root():
+        return {"message": "Welcome to Placement AI API (Frontend not built)"}
 
 @app.get("/api/health")
 async def health_check():
