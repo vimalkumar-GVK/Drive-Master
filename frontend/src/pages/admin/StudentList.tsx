@@ -84,7 +84,7 @@ export function StudentList() {
   const [activeTab, setActiveTab] = useState<"directory" | "trash" | "ats">("directory");
   const [students, setStudents] = useState<Student[]>([]);
   const [trashedStudents, setTrashedStudents] = useState<Student[]>([]);
-  const [companies] = useState<{ id: string; name: string }[]>([]);
+
   const [atsAnalysis, setAtsAnalysis] = useState<AtsAnalysis[]>([]);
   const processingAtsRef = useRef<Set<string>>(new Set());
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);

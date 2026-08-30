@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 import api from "../../lib/api";
 import { Users } from "lucide-react";

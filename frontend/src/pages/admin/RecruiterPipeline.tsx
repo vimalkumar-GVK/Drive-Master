@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import api from "../../lib/api";
 import { Download, X, Search, Filter, Plus, Eye, Edit2, Building2, Flame, CheckCircle, GraduationCap, Users, Trash2, Upload, MapPin } from "lucide-react";
 
