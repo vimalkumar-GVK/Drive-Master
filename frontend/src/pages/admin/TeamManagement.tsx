@@ -182,6 +182,9 @@ export function TeamManagement() {
 
   const { role } = useOutletContext<{ role: string }>();
   const isAdmin = role === "admin";
+  const isManager = role === "manager";
+  const isPlacementLead = role === "placement_lead";
+  const canEditCompany = isAdmin || isManager || isPlacementLead;
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this company?")) return;
@@ -370,7 +373,7 @@ export function TeamManagement() {
             accept=".xlsx,.csv" 
             onChange={handleUploadCompanyExcel} 
           />
-          {isAdmin && (
+          {canEditCompany && (
             <>
               <button 
                 onClick={() => companyExcelInputRef.current?.click()}
@@ -486,8 +489,8 @@ export function TeamManagement() {
                   <select
                     value={company.status.toUpperCase()}
                     onChange={(e) => handleStatusChange(company.id, e.target.value)}
-                    disabled={!isAdmin}
-                    className={`text-xs font-semibold rounded-full border px-2.5 py-1 focus:outline-none focus:ring-2 ${isAdmin ? 'cursor-pointer' : 'cursor-default opacity-80'} ${getStatusColor(company.status)}`}
+                    disabled={!canEditCompany}
+                    className={`text-xs font-semibold rounded-full border px-2.5 py-1 focus:outline-none focus:ring-2 ${canEditCompany ? 'cursor-pointer' : 'cursor-default opacity-80'} ${getStatusColor(company.status)}`}
                   >
                     <option value="COLD">COLD</option>
                     <option value="WARM">WARM</option>
@@ -497,7 +500,7 @@ export function TeamManagement() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    {company.status.toUpperCase() === 'HOT' && isAdmin && (
+                    {company.status.toUpperCase() === 'HOT' && canEditCompany && (
                       <button onClick={() => handleUploadJD(company.id)} className="flex items-center gap-1 text-xs font-medium bg-secondary text-secondary-foreground px-2 py-1.5 rounded hover:bg-secondary/80">
                         <Upload className="h-3 w-3" />
                         JD
@@ -505,7 +508,7 @@ export function TeamManagement() {
                     )}
                     {company.status.toUpperCase() === 'DRIVE COMPLETED' && (
                       <>
-                        {isAdmin && (
+                        {canEditCompany && (
                           <button onClick={() => handleUploadStudents(company.id)} className="flex items-center gap-1 text-xs font-medium bg-blue-100 text-blue-700 px-2 py-1.5 rounded hover:bg-blue-200">
                             <Upload className="h-3 w-3" />
                             Data
@@ -521,14 +524,16 @@ export function TeamManagement() {
                         </button>
                       </>
                     )}
-                    {isAdmin && (
+                    {canEditCompany && (
                       <>
                         <button onClick={() => { setEditCompany(company); setShowEditCompanyModal(true); }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded transition-colors" title="Edit Company">
                           <Edit2 className="h-4 w-4" />
                         </button>
-                        <button onClick={() => handleDelete(company.id)} className="text-destructive hover:bg-destructive/10 p-1.5 rounded transition-colors" title="Delete Company">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {isAdmin && (
+                          <button onClick={() => handleDelete(company.id)} className="text-destructive hover:bg-destructive/10 p-1.5 rounded transition-colors" title="Delete Company">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </>
                     )}
                   </div>

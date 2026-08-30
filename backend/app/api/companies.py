@@ -149,7 +149,7 @@ async def upload_companies(
 @router.delete("/{company_id}")
 async def delete_company(
     company_id: str,
-    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER]))
 ):
     db = get_database()
     try:

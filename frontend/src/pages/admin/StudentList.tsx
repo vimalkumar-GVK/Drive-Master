@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useOutletContext } from "react-router-dom";
 import api from "../../lib/api";
 import { X, Play, FileText, LayoutTemplate, Plus, Upload, Loader2, Sparkles, Users, Edit2, Trash2, RotateCcw, AlertTriangle, ArrowLeft } from "lucide-react";
 
@@ -99,6 +100,9 @@ export function StudentList() {
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const { role } = useOutletContext<{ role: string }>();
+  const canEdit = role === "admin" || role === "manager";
 
   const [formData, setFormData] = useState({
     roll_no: "", name: "", department: "", gender: "Male", acc: "Hosteller",
@@ -324,31 +328,34 @@ export function StudentList() {
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Student Directory</h1>
           <p className="text-slate-500 font-medium">Manage and analyze student placement profiles.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              setFormData({
-                roll_no: "", name: "", department: "", gender: "Male", acc: "Hosteller",
-                sslc_percentage: 0, sslc_year: "", hsc_percentage: 0, hsc_year: "",
-                ug_percentage: 0, ug_year: "", grad_year: "", email: "", phone: "",
-                resume_url: "", video_url: "", photo_url: "", portfolio_url: "", github_url: "", linkedin_url: "", placement_status: "YTBP"
-              });
-              setEditingStudentId(null);
-              setShowManualModal(true);
-            }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm hover:shadow-md group"
-          >
-            <Plus className="h-4 w-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
-            Add Manually
-          </button>
-          <button
-            onClick={() => setShowExcelModal(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl text-sm font-bold hover:shadow-lg hover:shadow-emerald-500/30 transition-all hover:-translate-y-0.5"
-          >
-            <Upload className="h-4 w-4" />
-            Upload Excel
-          </button>
         </div>
+        {canEdit && (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setFormData({
+                  roll_no: "", name: "", department: "", gender: "Male", acc: "Hosteller",
+                  sslc_percentage: 0, sslc_year: "", hsc_percentage: 0, hsc_year: "",
+                  ug_percentage: 0, ug_year: "", grad_year: "", email: "", phone: "",
+                  resume_url: "", video_url: "", photo_url: "", portfolio_url: "", github_url: "", linkedin_url: "", placement_status: "YTBP"
+                });
+                setEditingStudentId(null);
+                setShowManualModal(true);
+              }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm hover:shadow-md group"
+            >
+              <Plus className="h-4 w-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+              Add Manually
+            </button>
+            <button
+              onClick={() => setShowExcelModal(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl text-sm font-bold hover:shadow-lg hover:shadow-emerald-500/30 transition-all hover:-translate-y-0.5"
+            >
+              <Upload className="h-4 w-4" />
+              Upload Excel
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -485,50 +492,54 @@ export function StudentList() {
                     <td className="px-6 py-4 text-slate-500 font-medium">{student.phone}</td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setFormData({
-                              roll_no: student.roll_no,
-                              name: student.name,
-                              department: student.department,
-                              gender: student.gender || "Male",
-                              acc: student.acc || "Hosteller",
-                              sslc_percentage: parseFloat(student.sslc?.split(" ")[0]) || 0,
-                              sslc_year: student.sslc?.split("(")[1]?.replace(")", "") || "",
-                              hsc_percentage: parseFloat(student.hsc?.split(" ")[0]) || 0,
-                              hsc_year: student.hsc?.split("(")[1]?.replace(")", "") || "",
-                              ug_percentage: parseFloat(student.ug?.split(" ")[0]) || 0,
-                              ug_year: student.ug?.split("(")[1]?.replace(")", "") || "",
-                              grad_year: student.grad_year,
-                              email: student.email,
-                              phone: student.phone,
-                              resume_url: student.resume_url || "",
-                              video_url: student.video_url || "",
-                              photo_url: student.photo_url || "",
-                              portfolio_url: student.portfolio_url || "",
-                              github_url: student.github_url || "",
-                              linkedin_url: student.linkedin_url || "",
-                              placement_status: student.placement_status || "YTBP"
-                            });
-                            setEditingStudentId(student.id);
-                            setShowManualModal(true);
-                          }}
-                          className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-md transition-colors" 
-                          title="Edit Student"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(student.id);
-                          }}
-                          className="p-1.5 hover:bg-red-100 text-red-600 rounded-md transition-colors" 
-                          title="Move to Trash"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {canEdit && (
+                          <>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFormData({
+                                  roll_no: student.roll_no,
+                                  name: student.name,
+                                  department: student.department,
+                                  gender: student.gender || "Male",
+                                  acc: student.acc || "Hosteller",
+                                  sslc_percentage: parseFloat(student.sslc?.split(" ")[0]) || 0,
+                                  sslc_year: student.sslc?.split("(")[1]?.replace(")", "") || "",
+                                  hsc_percentage: parseFloat(student.hsc?.split(" ")[0]) || 0,
+                                  hsc_year: student.hsc?.split("(")[1]?.replace(")", "") || "",
+                                  ug_percentage: parseFloat(student.ug?.split(" ")[0]) || 0,
+                                  ug_year: student.ug?.split("(")[1]?.replace(")", "") || "",
+                                  grad_year: student.grad_year,
+                                  email: student.email,
+                                  phone: student.phone,
+                                  resume_url: student.resume_url || "",
+                                  video_url: student.video_url || "",
+                                  photo_url: student.photo_url || "",
+                                  portfolio_url: student.portfolio_url || "",
+                                  github_url: student.github_url || "",
+                                  linkedin_url: student.linkedin_url || "",
+                                  placement_status: student.placement_status || "YTBP"
+                                });
+                                setEditingStudentId(student.id);
+                                setShowManualModal(true);
+                              }}
+                              className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-md transition-colors" 
+                              title="Edit Student"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(student.id);
+                              }}
+                              className="p-1.5 hover:bg-red-100 text-red-600 rounded-md transition-colors" 
+                              title="Move to Trash"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

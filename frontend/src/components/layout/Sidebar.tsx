@@ -44,7 +44,7 @@ export function Sidebar({ className, role }: SidebarProps) {
       links.push({ name: "Student Details", href: `${base}/students`, icon: UserSquare2 });
     }
     
-    if (role === "admin" || role === "manager") {
+    if (role === "admin" || role === "manager" || role === "placement_lead") {
       links.push({ name: "Placement Team & Industry", href: `${base}/team`, icon: Users });
     }
 
