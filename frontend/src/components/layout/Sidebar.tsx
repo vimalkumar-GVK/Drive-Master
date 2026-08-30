@@ -15,7 +15,7 @@ export function Sidebar({ className, role }: SidebarProps) {
   const navigate = useNavigate();
 
   const getLinks = () => {
-    const base = `/${role.replace("_", "-")}`;
+    const base = `/${role}`;
 
     if (role === "student") {
       return [
@@ -92,7 +92,7 @@ export function Sidebar({ className, role }: SidebarProps) {
         <div className="py-8 px-4">
           <div className="space-y-1.5">
             {links.map((link, idx) => {
-              const isActive = location.pathname === link.href || (link.href !== `/${role.replace("_", "-")}` && location.pathname.startsWith(link.href));
+              const isActive = location.pathname === link.href || (link.href !== `/${role}` && location.pathname.startsWith(link.href));
               return (
                 <Link
                   key={idx}
