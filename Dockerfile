@@ -28,4 +28,4 @@ EXPOSE 8000
 
 # Render dynamically assigns the port via the $PORT environment variable, so use it if available. 
 # But uvicorn can be started via a shell command to pick up the env var.
-CMD sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
+CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
