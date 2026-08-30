@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from typing import Optional
 from app.core.config import settings
-from app.core.security import pwd_context
+
 from app.db.mongodb import get_database
 from app.models.user import UserInDB, RoleEnum
 
