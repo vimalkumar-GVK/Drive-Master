@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, User, Lock, Bell, CheckCircle2 } from 'lucide-react';
+import { Save, User, Lock, CheckCircle2 } from 'lucide-react';
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'notifications'>('profile');
@@ -19,11 +19,7 @@ export function Settings() {
     confirm: '',
   });
 
-  const [notifications, setNotifications] = useState({
-    emailAlerts: true,
-    weeklyReports: false,
-    newStudentRegistrations: true,
-  });
+
 
   useEffect(() => {
     // Determine user details based on current URL path and fake token
