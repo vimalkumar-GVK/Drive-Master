@@ -40,6 +40,12 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)) -> Use
         
     user["_id"] = str(user["_id"])
     
+    # Map missing fields for dummy authentication scheme
+    if "name" not in user:
+        user["name"] = user.get("full_name", "Unknown User")
+    if "hashed_password" not in user:
+        user["hashed_password"] = "dummy"
+    
     # Handle roles that are not in RoleEnum (like "Member" or "admin")
     if user.get("role") not in [e.value for e in RoleEnum]:
         # Just map it to a valid enum for the backend session
