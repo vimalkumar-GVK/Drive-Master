@@ -292,7 +292,7 @@ export function RecruiterPipeline() {
           <p className="text-sm text-slate-500 mt-1">Last updated • {currentDate}, {currentTime}</p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           {canEdit && (
             <button 
               onClick={() => setShowAddCompanyModal(true)}
@@ -368,13 +368,13 @@ export function RecruiterPipeline() {
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative">
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative w-full">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input 
                 type="text" 
                 placeholder="Search companies, location..." 
-                className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
               />
@@ -538,12 +538,12 @@ export function RecruiterPipeline() {
       {/* Selected Students Data (Appears when viewing placed students) */}
       {showPlacedModal && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mt-6 animate-in fade-in slide-in-from-bottom-4">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+          <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-slate-800">Selected Students Data</h2>
               <p className="text-xs text-slate-500 mt-1">Selected students data for export — S.No, Roll No, Name, Department, Company, CTC</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
               <button 
                 onClick={() => setShowPlacedModal(false)}
                 className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-600 font-semibold text-sm rounded-lg hover:bg-slate-50 transition-colors"
@@ -565,7 +565,7 @@ export function RecruiterPipeline() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
+            <table className="w-full text-sm text-left whitespace-nowrap">
               <thead className="bg-slate-50 text-slate-800 font-bold text-xs border-b border-slate-100">
                 <tr>
                   <th className="px-6 py-4 w-12 text-center"><input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" /></th>
@@ -878,7 +878,7 @@ export function RecruiterPipeline() {
             
             <div className="flex-1 overflow-auto bg-slate-50 p-6">
               <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                <table className="w-full text-sm text-left">
+                <table className="w-full text-sm text-left whitespace-nowrap">
                   <thead className="bg-slate-50 text-slate-800 font-bold text-xs border-b border-slate-100">
                     <tr>
                       <th className="px-6 py-4">S.No</th>

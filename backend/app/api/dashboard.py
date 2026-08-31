@@ -26,7 +26,8 @@ async def get_admin_dashboard_metrics(
     ctcs = []
     for p in placed_students_list:
         try:
-            val = float(p.get('ctc_lpa', 0))
+            val_str = str(p.get('ctc_lpa', '0')).lower().replace("lpa", "").strip()
+            val = float(val_str)
             if val > 0: ctcs.append(val)
         except (ValueError, TypeError):
             pass
@@ -55,9 +56,12 @@ async def get_admin_dashboard_metrics(
             "status": "Placed" if s.get("roll_no") in unique_placed_rolls else "Pending"
         })
 
-    # 2. Placement Team Members
-    team_cursor = db["users"].find({"role": {"$in": ["Manager", "manager", "placement_lead", "Member", "Analyst"]}})
-    team_members = await team_cursor.to_list(length=10)
+    # 2. Placement Team Members (Including Admins, excluding self)
+    team_cursor = db["users"].find({
+        "role": {"$nin": ["student", "Student"]},
+        "email": {"$ne": current_user.email}
+    })
+    team_members = await team_cursor.to_list(length=1000)
     team_data = [
         {
             "name": user.get("full_name", user.get("email", "").split("@")[0]), 
@@ -75,8 +79,30 @@ async def get_admin_dashboard_metrics(
     company_data = []
     for c in companies:
         c_id = str(c.get("_id"))
-        selected = c.get("selected_count", 0)
-        appeared = c.get("appeared_count", 0) # Fallback to 0 if not tracking applications yet
+        
+        company_placed_students = [p for p in placed_students_list if p.get("company_id") == c_id]
+        
+        selected = len(company_placed_students)
+        if selected == 0:
+            selected = c.get("selected_count", 0)
+            
+        appeared = c.get("appeared_count", 0)
+        if appeared < selected:
+            appeared = selected # Fallback to selected if appeared is lower
+            
+        comp_ctcs = []
+        for p in company_placed_students:
+            try:
+                val_str = str(p.get("ctc_lpa", "0")).lower().replace("lpa", "").strip()
+                val = float(val_str)
+                if val > 0: comp_ctcs.append(val)
+            except (ValueError, TypeError):
+                pass
+                
+        if comp_ctcs:
+            avg_comp_ctc = sum(comp_ctcs) / len(comp_ctcs)
+        else:
+            avg_comp_ctc = float(c.get("ctc", 0)) if c.get("ctc") else 0.0
         
         company_data.append({
             "name": c.get("name"),
@@ -84,7 +110,7 @@ async def get_admin_dashboard_metrics(
             "contact": c.get("contact_person", "N/A"),
             "appeared": appeared,
             "selected": selected,
-            "ctc": float(c.get("ctc", 0)) if c.get("ctc") else 0.0
+            "ctc": round(avg_comp_ctc, 2)
         })
         
     return {

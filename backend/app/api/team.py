@@ -22,7 +22,10 @@ class AddMemberRequest(BaseModel):
 @router.get("/members")
 async def get_team_members(current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))):
     db = get_database()
-    users = await db["users"].find({"role": {"$ne": "student"}}).to_list(length=100)
+    users = await db["users"].find({
+        "role": {"$nin": ["student", "Student"]},
+        "email": {"$ne": current_user.email}
+    }).to_list(length=100)
     
     return {
         "members": [

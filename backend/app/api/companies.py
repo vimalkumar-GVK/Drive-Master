@@ -32,6 +32,9 @@ class CompanyCreate(BaseModel):
     address: Optional[str] = None
     map_url: Optional[str] = None
     ctc_lpa: Optional[str] = None
+
+class ManualRegisteredStudents(BaseModel):
+    roll_numbers: List[str]
     
 @router.get("")
 async def get_companies(
@@ -184,7 +187,7 @@ class CompanyStatusUpdate(BaseModel):
 async def update_company_status(
     company_id: str,
     status_update: CompanyStatusUpdate,
-    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN]))
 ):
     db = get_database()
     try:
@@ -201,6 +204,107 @@ async def update_company_status(
         raise HTTPException(status_code=404, detail="Company not found")
         
     return {"message": "Status updated successfully"}
+
+@router.patch("/{company_id}/status/request")
+async def request_company_status(
+    company_id: str,
+    status_update: CompanyStatusUpdate,
+    current_user: UserInDB = Depends(require_role([RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+):
+    db = get_database()
+    try:
+        obj_id = ObjectId(company_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid company ID")
+        
+    res = await db["companies"].update_one(
+        {"_id": obj_id},
+        {"$set": {
+            "pending_status": status_update.status,
+            "status_requested_by": current_user.name or current_user.email,
+            "status_requested_role": current_user.role,
+            "status_requested_at": datetime.utcnow().isoformat()
+        }}
+    )
+    
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Company not found")
+        
+    return {"message": "Status change requested successfully"}
+
+@router.get("/status_requests")
+async def get_status_requests(
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN]))
+):
+    db = get_database()
+    cursor = db["companies"].find({"pending_status": {"$exists": True, "$ne": None}})
+    companies = await cursor.to_list(length=1000)
+    
+    result = []
+    for c in companies:
+        c["id"] = str(c["_id"])
+        del c["_id"]
+        result.append(c)
+        
+    return result
+
+@router.post("/{company_id}/status/approve")
+async def approve_company_status(
+    company_id: str,
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN]))
+):
+    db = get_database()
+    try:
+        obj_id = ObjectId(company_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid company ID")
+        
+    company = await db["companies"].find_one({"_id": obj_id})
+    if not company or not company.get("pending_status"):
+        raise HTTPException(status_code=404, detail="No pending status request found for this company")
+        
+    res = await db["companies"].update_one(
+        {"_id": obj_id},
+        {
+            "$set": {"status": company["pending_status"]},
+            "$unset": {
+                "pending_status": "",
+                "status_requested_by": "",
+                "status_requested_role": "",
+                "status_requested_at": ""
+            }
+        }
+    )
+    
+    return {"message": "Status approved successfully"}
+
+@router.post("/{company_id}/status/reject")
+async def reject_company_status(
+    company_id: str,
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN]))
+):
+    db = get_database()
+    try:
+        obj_id = ObjectId(company_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid company ID")
+        
+    res = await db["companies"].update_one(
+        {"_id": obj_id},
+        {
+            "$unset": {
+                "pending_status": "",
+                "status_requested_by": "",
+                "status_requested_role": "",
+                "status_requested_at": ""
+            }
+        }
+    )
+    
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Company not found")
+        
+    return {"message": "Status rejected successfully"}
 
 @router.put("/{company_id}")
 async def update_company_details(
@@ -337,6 +441,76 @@ async def upload_placed_students(
         
         return {"message": f"Successfully processed {len(placed_students)} placed students."}
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class PlacedStudentInput(BaseModel):
+    roll_no: str
+    ctc_lpa: str
+
+class ManualPlacedStudents(BaseModel):
+    students: List[PlacedStudentInput]
+
+@router.post("/{company_id}/placed_students/manual")
+async def add_manual_placed_students(
+    company_id: str,
+    data: ManualPlacedStudents,
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+):
+    db = get_database()
+    
+    # Get company to get company_name
+    company = await db["companies"].find_one({"_id": ObjectId(company_id)})
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+        
+    company_name = company.get("name", "")
+    
+    placed_students = []
+    
+    # Process each student
+    for s_input in data.students:
+        roll_no = s_input.roll_no.strip()
+        ctc_lpa = s_input.ctc_lpa.strip()
+        
+        if not roll_no:
+            continue
+            
+        # Fetch from master DB
+        student_doc = await db["students"].find_one({"roll_no": roll_no})
+        
+        placed_students.append({
+            "company_id": company_id,
+            "s_no": len(placed_students) + 1,
+            "roll_no": roll_no,
+            "name": student_doc.get("name", "") if student_doc else "",
+            "department": student_doc.get("department", "") if student_doc else "",
+            "company_name": company_name,
+            "ctc_lpa": ctc_lpa
+        })
+        
+    if not placed_students:
+        return {"message": "No valid students provided."}
+        
+    try:
+        # Avoid duplicates by deleting these roll numbers for this company first
+        roll_numbers_to_delete = [s["roll_no"] for s in placed_students]
+        await db["placed_students"].delete_many({
+            "company_id": company_id,
+            "roll_no": {"$in": roll_numbers_to_delete}
+        })
+        
+        await db["placed_students"].insert_many(placed_students)
+        
+        # Update selected count based on total placed students for this company
+        total_selected = await db["placed_students"].count_documents({"company_id": company_id})
+        
+        await db["companies"].update_one(
+            {"_id": ObjectId(company_id)},
+            {"$set": {"selected_count": total_selected, "status": "DRIVE COMPLETED"}}
+        )
+        
+        return {"message": f"Successfully added {len(placed_students)} selected students manually."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -531,6 +705,47 @@ async def upload_registered_students(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
+@router.post("/{company_id}/registered_students/manual")
+async def add_manual_registered_students(
+    company_id: str,
+    data: ManualRegisteredStudents,
+    background_tasks: BackgroundTasks,
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+):
+    try:
+        roll_numbers = [r.strip() for r in data.roll_numbers if r.strip()]
+        if not roll_numbers:
+            raise HTTPException(status_code=400, detail="No roll numbers provided")
+            
+        db = get_database()
+        
+        # Initialize basic records immediately
+        updates = []
+        from pymongo import UpdateOne
+        for roll in roll_numbers:
+            updates.append(
+                UpdateOne(
+                    {"company_id": company_id, "roll_no": roll},
+                    {"$setOnInsert": {
+                        "ats_score": 0,
+                        "match_status": "Pending Analysis",
+                        "student_id": None
+                    }},
+                    upsert=True
+                )
+            )
+        if updates:
+            await db["company_registered_students"].bulk_write(updates)
+            
+        # Queue the background task to calculate ATS scores
+        background_tasks.add_task(process_ats_background, company_id, roll_numbers)
+            
+        return {"message": f"Successfully added {len(roll_numbers)} registered student(s). ATS Analysis started in background."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process manual entry: {str(e)}")
+
 @router.get("/{company_id}/registered_students")
 async def get_registered_students(
     company_id: str,
@@ -562,9 +777,95 @@ async def get_registered_students(
             s_data["_id"] = str(s_data["_id"])
             s_data["ats_score"] = r.get("ats_score", 0)
             s_data["match_status"] = r.get("match_status", "Pending")
+            s_data["attended"] = r.get("attended", False)
             result.append(s_data)
             
     # Sort by ats_score descending
     result.sort(key=lambda x: x.get("ats_score", 0), reverse=True)
             
     return {"students": result}
+
+class AttendanceUpdate(BaseModel):
+    attended: bool
+
+@router.patch("/{company_id}/registered_students/{roll_no}/attendance")
+async def update_attendance(
+    company_id: str,
+    roll_no: str,
+    attendance_update: AttendanceUpdate,
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+):
+    db = get_database()
+    res = await db["company_registered_students"].update_one(
+        {"company_id": company_id, "roll_no": roll_no},
+        {"$set": {"attended": attendance_update.attended}}
+    )
+    
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Student not found in registered list")
+        
+    return {"message": "Attendance updated successfully"}
+
+class BulkAttendanceManual(BaseModel):
+    roll_numbers: List[str]
+
+@router.post("/{company_id}/registered_students/attend_bulk/manual")
+async def mark_bulk_attended_manual(
+    company_id: str,
+    data: BulkAttendanceManual,
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+):
+    try:
+        roll_numbers = [r.strip() for r in data.roll_numbers if r.strip()]
+        if not roll_numbers:
+            raise HTTPException(status_code=400, detail="No roll numbers provided")
+            
+        db = get_database()
+        res = await db["company_registered_students"].update_many(
+            {"company_id": company_id, "roll_no": {"$in": roll_numbers}},
+            {"$set": {"attended": True}}
+        )
+        return {"message": f"Successfully marked {res.modified_count} students as attended out of {len(roll_numbers)} requested."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process manual attendance: {str(e)}")
+
+@router.post("/{company_id}/registered_students/attend_bulk/upload")
+async def mark_bulk_attended_upload(
+    company_id: str,
+    file: UploadFile = File(...),
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+):
+    if not file.filename.endswith(('.xlsx', '.csv')):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload .xlsx or .csv")
+
+    try:
+        content = await file.read()
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(content))
+        else:
+            df = pd.read_excel(io.BytesIO(content))
+
+        df.columns = [c.strip().lower() for c in df.columns]
+        roll_col = next((c for c in df.columns if 'roll' in c or 'register' in c), None)
+        if not roll_col:
+            raise HTTPException(status_code=400, detail="Excel must contain a Roll No / Register No column.")
+            
+        roll_numbers = df[roll_col].dropna().astype(str).tolist()
+        roll_numbers = [r.strip() for r in roll_numbers if r.strip()]
+        
+        if not roll_numbers:
+            return {"message": "No valid roll numbers found in the file."}
+
+        db = get_database()
+        res = await db["company_registered_students"].update_many(
+            {"company_id": company_id, "roll_no": {"$in": roll_numbers}},
+            {"$set": {"attended": True}}
+        )
+        
+        return {"message": f"Successfully marked {res.modified_count} students as attended from Excel."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")

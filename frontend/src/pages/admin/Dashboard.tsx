@@ -63,6 +63,7 @@ const getRoleBadge = (role: string) => {
 
 export function AdminDashboard() {
   const [data, setData] = useState<MetricsData | null>(null);
+  const [statusRequests, setStatusRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -73,6 +74,9 @@ export function AdminDashboard() {
     try {
       const response = await api.get("/dashboard/admin/metrics");
       setData(response.data);
+      
+      const requestsRes = await api.get("/companies/status_requests");
+      setStatusRequests(requestsRes.data);
     } catch (err) {
       console.error("Failed to fetch metrics", err);
       setError("Failed to load dashboard metrics. Please try again.");
@@ -101,30 +105,30 @@ export function AdminDashboard() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Panel 1 Dashboard</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
           <p className="text-sm text-slate-500 mt-1">Overview & insights for placements • Updated today, {currentDate} • {currentTime}</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <input type="text" placeholder="Search students, companies..." className="pl-10 pr-4 py-2 bg-white rounded-lg text-sm border-none shadow-sm focus:ring-2 focus:ring-indigo-500 w-64" />
-            <svg className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+      </div>
+
+      {/* Pending Approvals Banner */}
+      {statusRequests.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-orange-100 rounded-lg text-orange-600">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-orange-800">Pending Action Required</h3>
+              <p className="text-xs text-orange-700 mt-0.5">You have {statusRequests.length} company status verification request(s) waiting for approval from the Placement Team.</p>
+            </div>
           </div>
-          <button className="p-2 bg-white rounded-lg shadow-sm text-slate-600 hover:text-indigo-600 relative">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-            <span className="absolute top-1.5 right-2 h-2 w-2 rounded-full bg-red-500"></span>
-          </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Export
+          <button onClick={() => window.location.href = '/admin/team'} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-bold rounded-lg shadow-sm transition-colors">
+            Review Approvals
           </button>
         </div>
-      </div>
+      )}
 
       {/* 4 Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -200,7 +204,7 @@ export function AdminDashboard() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
+              <table className="w-full text-sm text-left whitespace-nowrap">
                 <thead className="text-xs text-slate-500 font-bold uppercase tracking-wider border-b border-slate-100">
                   <tr>
                     <th className="py-3 px-2">Roll No</th>
@@ -291,9 +295,9 @@ export function AdminDashboard() {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {data.team_members.slice(0, 5).map((member, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[300px] overflow-y-auto pr-2">
+              {data.team_members.map((member, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-colors">
                   <div className="flex items-center gap-3 relative">
                     <div className="relative">
                       <img src={member.avatar} alt={member.name} className="w-10 h-10 rounded-full bg-slate-100" />
@@ -301,7 +305,10 @@ export function AdminDashboard() {
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-slate-800">{member.name}</h4>
-                      <p className="text-xs text-slate-500">{member.role}</p>
+                      <p className="text-xs text-slate-500">
+                        {member.role === 'placement_lead' ? 'Placement Lead' : 
+                         member.role === 'admin' ? 'Admin' : member.role}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -335,7 +342,7 @@ export function AdminDashboard() {
           </div>
 
           <div className="flex-1">
-            <table className="w-full text-xs text-left mb-8">
+            <table className="w-full text-xs text-left mb-8 whitespace-nowrap">
               <thead className="text-slate-500 font-bold uppercase border-b border-slate-100">
                 <tr>
                   <th className="py-2">Company</th>

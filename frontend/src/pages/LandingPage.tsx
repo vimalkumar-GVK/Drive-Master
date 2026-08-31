@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, Brain, ArrowRight, Scan, Trophy, Workflow } from 'lucide-react';
+import { Sparkles, ArrowRight, Scan, Trophy, Workflow } from 'lucide-react';
 
 export function LandingPage() {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -61,7 +61,7 @@ export function LandingPage() {
   }, []);
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-[#0A0F1F] text-slate-300 font-sans selection:bg-blue-500/30 overflow-x-hidden relative">
+    <div ref={containerRef} className="min-h-screen bg-gradient-to-br from-[#0F172A] via-[#0F172A] to-[#7C2D8A]/20 text-slate-300 font-sans selection:bg-[#1A96C9]/30 overflow-x-hidden relative">
       
       {/* Scroll Progress Bar */}
       <div 
@@ -88,28 +88,25 @@ export function LandingPage() {
       </div>
 
       {/* Sticky Header */}
-      <header className="sticky top-0 z-40 w-full border-b border-white/5 bg-[#0A0F1F]/60 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 group cursor-pointer">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform">
-              <Brain className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xl font-bold tracking-tight text-white">PlacementAI</span>
+      <header className="sticky top-0 z-40 w-full bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 h-24 flex items-center justify-between">
+          <div className="flex items-center group cursor-pointer hover:scale-[1.02] transition-transform">
+            <img src="/rgu-logo.png" alt="Rathinam Global University" className="h-20 object-contain" />
           </div>
           
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
-            <a href="#features" className="hover:text-white transition-colors">Features</a>
-            <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
-            <a href="#testimonials" className="hover:text-white transition-colors">Testimonials</a>
+          <nav className="hidden md:flex items-center gap-8 text-[15px] font-semibold text-slate-600">
+            <a href="#features" className="hover:text-slate-900 transition-colors">Features</a>
+            <a href="#how-it-works" className="hover:text-slate-900 transition-colors">How it works</a>
+            <a href="#testimonials" className="hover:text-slate-900 transition-colors">Testimonials</a>
           </nav>
 
           <div className="flex items-center gap-6">
-            <Link to="/login" className="text-sm font-medium text-slate-300 hover:text-white transition-colors">
+            <Link to="/login" className="text-[15px] font-bold text-slate-700 hover:text-slate-900 transition-colors">
               Sign In
             </Link>
             <Link 
               to="/login"
-              className="px-4 py-2 rounded-full bg-white text-slate-900 text-sm font-bold hover:bg-slate-200 transition-colors flex items-center gap-2 group"
+              className="px-6 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-teal-400 text-white text-[15px] font-bold hover:opacity-90 transition-opacity flex items-center gap-2 group shadow-md"
             >
               Get Started <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
             </Link>
@@ -126,8 +123,7 @@ export function LandingPage() {
           
           <h1 className="stagger-2 text-5xl md:text-[72px] font-[900] tracking-tight text-white mb-8 leading-[1.1] max-w-5xl">
             Match the right talent with the <br className="hidden md:block" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-cyan-400">perfect</span>{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-emerald-500">opportunity</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#1A96C9] to-[#A3BA3E]">perfect opportunity</span>
           </h1>
           
           <p className="stagger-3 text-lg md:text-xl text-slate-400 mb-12 max-w-2xl leading-relaxed">
@@ -137,14 +133,14 @@ export function LandingPage() {
           <div className="stagger-4 flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
             <Link 
               to="/login"
-              className="group relative px-8 py-4 rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-lg font-bold transition-all hover:scale-[1.02] shadow-[0_0_40px_rgba(59,130,246,0.4)] flex items-center justify-center gap-2 w-full sm:w-auto overflow-hidden"
+              className="group relative px-8 py-4 rounded-full bg-gradient-to-r from-[#1A96C9] to-[#7C2D8A] text-white text-lg font-bold transition-all hover:scale-[1.02] shadow-[0_0_40px_rgba(26,150,201,0.4)] flex items-center justify-center gap-2 w-full sm:w-auto overflow-hidden"
             >
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
               <span className="relative z-10 flex items-center gap-2">Access Portal <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" /></span>
             </Link>
             <a 
               href="#features"
-              className="px-8 py-4 rounded-full bg-white/5 border border-white/10 text-white text-lg font-semibold hover:bg-white/10 transition-all flex items-center justify-center w-full sm:w-auto backdrop-blur-sm"
+              className="px-8 py-4 rounded-full bg-white/5 border border-white/20 text-white text-lg font-semibold hover:bg-white/10 transition-all flex items-center justify-center w-full sm:w-auto backdrop-blur-md shadow-lg"
             >
               Explore Features
             </a>
@@ -347,11 +343,11 @@ export function LandingPage() {
       </main>
 
       {/* FOOTER */}
-      <footer className="border-t border-white/5 bg-[#0A0F1F] py-12 relative z-10">
+      <footer className="border-t border-white/5 bg-[#0F172A] py-12 relative z-10">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <Brain className="h-6 w-6 text-slate-400" />
-            <span className="text-lg font-bold text-slate-400">PlacementAI</span>
+          <div className="flex items-center gap-2 group cursor-pointer">
+            <img src="/rgu-logo.png" alt="Rathinam Global University" className="h-8 object-contain opacity-70 group-hover:opacity-100 transition-opacity" />
+            <span className="text-lg font-bold text-slate-400 group-hover:text-white transition-colors">RGU Placement Portal</span>
           </div>
           <div className="flex items-center gap-6 text-sm font-medium text-slate-500">
             <a href="#" className="hover:text-white transition-colors">Privacy</a>

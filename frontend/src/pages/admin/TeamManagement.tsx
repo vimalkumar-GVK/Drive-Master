@@ -78,6 +78,8 @@ export function TeamManagement() {
   const [showJdModal, setShowJdModal] = useState(false);
   const [jdUrl, setJdUrl] = useState("");
 
+  const [stagedStatusChanges, setStagedStatusChanges] = useState<{ [key: string]: string }>({});
+
   const fetchCompanies = async () => {
     try {
       const res = await api.get("/companies");
@@ -130,6 +132,140 @@ export function TeamManagement() {
     } finally {
       setPreviewLoading(false);
     }
+  };
+
+  const [showRegPreviewModal, setShowRegPreviewModal] = useState(false);
+  const [regPreviewData, setRegPreviewData] = useState<any[]>([]);
+  const [regFilter, setRegFilter] = useState("ALL");
+  const [regPreviewCompanyStatus, setRegPreviewCompanyStatus] = useState<string>("");
+  const [showManualRegModal, setShowManualRegModal] = useState(false);
+  const [manualRegRollNumbers, setManualRegRollNumbers] = useState("");
+  
+  const [showManualSelectedModal, setShowManualSelectedModal] = useState(false);
+  const [manualSelectedRollNumbers, setManualSelectedRollNumbers] = useState("");
+  const [manualSelectedCTC, setManualSelectedCTC] = useState("");
+  
+  const [selectedPreviewSearch, setSelectedPreviewSearch] = useState("");
+  
+  const [showBulkAttendManualModal, setShowBulkAttendManualModal] = useState(false);
+  const [bulkAttendRollNumbers, setBulkAttendRollNumbers] = useState("");
+  const bulkAttendInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePreviewRegisteredStudents = async (companyId: string, companyName: string, companyStatus: string = "") => {
+    setSelectedCompanyId(companyId);
+    setPreviewTitle(`Registered Students - ${companyName}`);
+    setRegPreviewCompanyStatus(companyStatus);
+    setShowRegPreviewModal(true);
+    setPreviewLoading(true);
+    setRegPreviewData([]);
+    
+    try {
+      const res = await api.get(`/companies/${companyId}/registered_students`);
+      setRegPreviewData(res.data.students || []);
+      setRegFilter("ALL");
+    } catch (error) {
+      console.error("Failed to load registered preview:", error);
+      alert("Failed to load registered students.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleManualRegSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCompanyId) return;
+    try {
+      const rolls = manualRegRollNumbers.split(",").map(r => r.trim()).filter(r => r);
+      if (rolls.length === 0) return alert("Please enter at least one roll number.");
+      await api.post(`/companies/${selectedCompanyId}/registered_students/manual`, { roll_numbers: rolls });
+      alert("Registered students added successfully!");
+      setShowManualRegModal(false);
+      setManualRegRollNumbers("");
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.detail || "Failed to add registered students.");
+    }
+  };
+
+  const handleManualSelectedSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCompanyId) return;
+    try {
+      const lines = manualSelectedRollNumbers.split('\n').map(l => l.trim()).filter(l => l);
+      if (lines.length === 0) return alert("Please enter at least one roll number.");
+      
+      const students = lines.map(line => {
+        // Assume format: RollNo, CTC or just RollNo if CTC is global
+        // Wait, the user asked for Roll No and CTC. I'll split by comma if present, else use global CTC
+        const parts = line.split(',');
+        return {
+          roll_no: parts[0].trim(),
+          ctc_lpa: parts.length > 1 ? parts[1].trim() : manualSelectedCTC.trim()
+        };
+      });
+
+      await api.post(`/companies/${selectedCompanyId}/placed_students/manual`, { students });
+      alert("Selected students added successfully!");
+      setShowManualSelectedModal(false);
+      setManualSelectedRollNumbers("");
+      setManualSelectedCTC("");
+      fetchCompanies(); // Refresh selected_count
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.detail || "Failed to add selected students.");
+    }
+  };
+
+  const toggleStudentAttendance = async (rollNo: string, currentStatus: boolean) => {
+    if (!selectedCompanyId) return;
+    try {
+      await api.patch(`/companies/${selectedCompanyId}/registered_students/${rollNo}/attendance`, {
+        attended: !currentStatus
+      });
+      // update local state
+      setRegPreviewData(prev => prev.map(s => s.roll_no === rollNo ? { ...s, attended: !currentStatus } : s));
+    } catch (error) {
+      alert("Failed to update attendance.");
+    }
+  };
+
+  const handleBulkAttendManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCompanyId || !bulkAttendRollNumbers.trim()) return;
+
+    try {
+      const rollNumbers = bulkAttendRollNumbers.split(',').map(r => r.trim()).filter(r => r);
+      await api.post(`/companies/${selectedCompanyId}/registered_students/attend_bulk/manual`, {
+        roll_numbers: rollNumbers
+      });
+      alert("Successfully updated attendance.");
+      setShowBulkAttendManualModal(false);
+      setBulkAttendRollNumbers("");
+      handlePreviewRegisteredStudents(selectedCompanyId, previewTitle.replace("Registered Students - ", ""), regPreviewCompanyStatus);
+    } catch (error: any) {
+      console.error("Failed to bulk update manual attendance:", error);
+      alert(error.response?.data?.detail || "Failed to update attendance");
+    }
+  };
+
+  const handleBulkAttendUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedCompanyId) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await api.post(`/companies/${selectedCompanyId}/registered_students/attend_bulk/upload`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      alert(res.data.message || "Successfully uploaded attendance.");
+      handlePreviewRegisteredStudents(selectedCompanyId, previewTitle.replace("Registered Students - ", ""), regPreviewCompanyStatus);
+    } catch (error: any) {
+      console.error("Failed to upload attendance Excel:", error);
+      alert(error.response?.data?.detail || "Failed to upload file");
+    }
+    if (bulkAttendInputRef.current) bulkAttendInputRef.current.value = "";
   };
 
   const fetchMembers = () => {
@@ -199,8 +335,18 @@ export function TeamManagement() {
 
   const handleStatusChange = async (id: string, newStatus: string) => {
     try {
-      await api.patch(`/companies/${id}/status`, { status: newStatus });
+      if (isAdmin) {
+        await api.patch(`/companies/${id}/status`, { status: newStatus });
+      } else {
+        await api.patch(`/companies/${id}/status/request`, { status: newStatus });
+        alert("Status change requested and sent for Admin approval.");
+      }
       fetchCompanies();
+      setStagedStatusChanges(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     } catch (error) {
       console.error("Failed to update status:", error);
       alert("Failed to update status");
@@ -300,18 +446,19 @@ export function TeamManagement() {
     if (jdInputRef.current) jdInputRef.current.value = "";
   };
 
-  const handleUploadStudents = (companyId: string) => {
-    setSelectedCompanyId(companyId);
-    if (studentInputRef.current) studentInputRef.current.click();
-  };
-
   const onStudentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files.length || !selectedCompanyId) return;
     const file = e.target.files[0];
     const formData = new FormData();
     formData.append("file", file);
+    
+    const uploadType = studentInputRef.current?.getAttribute("data-upload-type") || "placed";
+    const endpoint = uploadType === "registered" 
+      ? `/companies/${selectedCompanyId}/registered_students/upload` 
+      : `/companies/${selectedCompanyId}/upload_students`;
+
     try {
-      const res = await api.post(`/companies/${selectedCompanyId}/upload_students`, formData, {
+      const res = await api.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       alert(res.data.message);
@@ -357,15 +504,71 @@ export function TeamManagement() {
     return matchesSearch && matchesFilter;
   });
 
+  const [activeTab, setActiveTab] = useState<'pipeline' | 'approvals'>('pipeline');
+  const [statusRequests, setStatusRequests] = useState<any[]>([]);
+
+  const fetchStatusRequests = async () => {
+    try {
+      const res = await api.get("/companies/status_requests");
+      setStatusRequests(res.data);
+    } catch (err) {
+      console.error("Failed to fetch status requests:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchStatusRequests();
+    }
+  }, [isAdmin]);
+
+  const handleApproveStatus = async (id: string) => {
+    try {
+      await api.post(`/companies/${id}/status/approve`);
+      fetchStatusRequests();
+      fetchCompanies();
+    } catch (err) {
+      alert("Failed to approve status");
+    }
+  };
+
+  const handleRejectStatus = async (id: string) => {
+    try {
+      await api.post(`/companies/${id}/status/reject`);
+      fetchStatusRequests();
+      fetchCompanies();
+    } catch (err) {
+      alert("Failed to reject status");
+    }
+  };
+
   return (
     <div className="space-y-6 relative">
       <input type="file" className="hidden" ref={jdInputRef} accept=".pdf,.doc,.docx" onChange={onJDFileChange} />
       <input type="file" className="hidden" ref={studentInputRef} accept=".xlsx,.csv" onChange={onStudentFileChange} />
 
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Recruiters Pipeline</h1>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold tracking-tight">Recruiters Pipeline</h1>
+          {isAdmin && (
+            <div className="flex bg-slate-100 p-1 rounded-lg">
+              <button
+                onClick={() => setActiveTab('pipeline')}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'pipeline' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Pipeline
+              </button>
+              <button
+                onClick={() => setActiveTab('approvals')}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'approvals' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Approvals {statusRequests.length > 0 && <span className="ml-1 bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full text-xs">{statusRequests.length}</span>}
+              </button>
+            </div>
+          )}
+        </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <input 
             type="file" 
             ref={companyExcelInputRef} 
@@ -391,19 +594,21 @@ export function TeamManagement() {
                 <Plus className="h-4 w-4" />
                 Add Company
               </button>
-              <button 
-                onClick={() => setShowTeamModal(true)} 
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-sm font-semibold transition-colors"
-              >
-                <Users className="h-4 w-4" /> Manage Team
-              </button>
+              {isAdmin && (
+                <button 
+                  onClick={() => setShowTeamModal(true)} 
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-sm font-semibold transition-colors"
+                >
+                  <Users className="h-4 w-4" /> Manage Team
+                </button>
+              )}
             </>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-4 mb-4">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-col md:flex-row items-start md:items-center gap-4 mb-4">
+        <div className="relative w-full md:flex-1 max-w-md">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
@@ -414,8 +619,8 @@ export function TeamManagement() {
           />
         </div>
         
-        <div className="flex items-center gap-2 bg-secondary p-1 rounded-md">
-          {['ALL', 'COLD', 'WARM', 'HOT', 'DRIVE COMPLETED'].map(f => (
+        <div className="flex flex-wrap items-center gap-2 bg-secondary p-1 rounded-md w-full md:w-auto">
+          {['ALL', 'COLD', 'WARM', 'HOT', 'REGISTERED', 'DRIVE COMPLETED'].map(f => (
             <button 
               key={f}
               onClick={() => setFilter(f)}
@@ -427,8 +632,54 @@ export function TeamManagement() {
         </div>
       </div>
 
-      <div className="rounded-md border bg-card">
-        <table className="w-full text-sm text-left">
+      {activeTab === 'approvals' && isAdmin ? (
+        <div className="rounded-md border bg-card overflow-hidden">
+          <div className="p-4 border-b">
+            <h2 className="text-lg font-semibold">Pending Status Approvals</h2>
+          </div>
+          {statusRequests.length === 0 ? (
+            <div className="p-8 text-center text-slate-500">No pending approvals</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left whitespace-nowrap">
+                <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Company</th>
+                    <th className="px-4 py-3 font-medium">Current Status</th>
+                    <th className="px-4 py-3 font-medium">Requested Status</th>
+                    <th className="px-4 py-3 font-medium">Requested By</th>
+                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {statusRequests.map(req => (
+                    <tr key={req.id} className="hover:bg-muted/50">
+                      <td className="px-4 py-3 font-semibold">{req.name}</td>
+                      <td className="px-4 py-3"><span className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${getStatusColor(req.status)}`}>{req.status}</span></td>
+                      <td className="px-4 py-3"><span className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${getStatusColor(req.pending_status)}`}>{req.pending_status}</span></td>
+                      <td className="px-4 py-3 text-slate-600">{req.status_requested_by} ({req.status_requested_role})</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {req.jd_url && (
+                            <button onClick={() => { setJdUrl(`http://localhost:8000${req.jd_url}`); setShowJdModal(true); }} className="text-xs font-medium bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 flex items-center gap-1">
+                              <FileText className="h-3 w-3" /> View JD
+                            </button>
+                          )}
+                          <button onClick={() => handleApproveStatus(req.id)} className="text-xs font-medium bg-green-100 text-green-700 px-3 py-1.5 rounded hover:bg-green-200">Approve</button>
+                          <button onClick={() => handleRejectStatus(req.id)} className="text-xs font-medium bg-red-100 text-red-700 px-3 py-1.5 rounded hover:bg-red-200">Reject</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+      <div className="rounded-md border bg-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left whitespace-nowrap">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b">
             <tr>
               <th className="px-4 py-3 font-medium">Company</th>
@@ -483,36 +734,124 @@ export function TeamManagement() {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-center font-medium">
-                  {company.status.toUpperCase() === 'HOT' || company.status.toUpperCase() === 'DRIVE COMPLETED' ? (company.ctc_lpa || '-') : '-'}
+                  {company.ctc_lpa || '-'}
                 </td>
                 <td className="px-4 py-3">
-                  <select
-                    value={company.status.toUpperCase()}
-                    onChange={(e) => handleStatusChange(company.id, e.target.value)}
-                    disabled={!canEditCompany}
-                    className={`text-xs font-semibold rounded-full border px-2.5 py-1 focus:outline-none focus:ring-2 ${canEditCompany ? 'cursor-pointer' : 'cursor-default opacity-80'} ${getStatusColor(company.status)}`}
-                  >
-                    <option value="COLD">COLD</option>
-                    <option value="WARM">WARM</option>
-                    <option value="HOT">HOT</option>
-                    <option value="DRIVE COMPLETED">DRIVE COMPLETED</option>
-                  </select>
+                  {company.pending_status ? (
+                    <span className="text-xs font-semibold rounded-full border px-2.5 py-1 bg-yellow-100 text-yellow-800 border-yellow-200">
+                      Pending: {company.pending_status}
+                    </span>
+                  ) : (
+                    <div className="flex flex-col gap-1.5 items-center">
+                      <select
+                        value={stagedStatusChanges[company.id] || company.status.toUpperCase()}
+                        onChange={(e) => {
+                          if (isAdmin) {
+                            handleStatusChange(company.id, e.target.value);
+                          } else {
+                            if (e.target.value === company.status.toUpperCase()) {
+                              setStagedStatusChanges(prev => {
+                                const next = { ...prev };
+                                delete next[company.id];
+                                return next;
+                              });
+                            } else {
+                              setStagedStatusChanges(prev => ({ ...prev, [company.id]: e.target.value }));
+                            }
+                          }
+                        }}
+                        disabled={!canEditCompany}
+                        className={`text-xs font-semibold rounded-full border px-2.5 py-1 focus:outline-none focus:ring-2 ${canEditCompany ? 'cursor-pointer' : 'cursor-default opacity-80'} ${getStatusColor(stagedStatusChanges[company.id] || company.status)}`}
+                      >
+                        <option value="COLD">COLD</option>
+                        <option value="WARM">WARM</option>
+                        <option value="HOT">HOT</option>
+                        <option value="REGISTERED">REGISTERED</option>
+                        <option value="DRIVE COMPLETED">DRIVE COMPLETED</option>
+                      </select>
+                      {stagedStatusChanges[company.id] && !isAdmin && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <button
+                            onClick={() => handleStatusChange(company.id, stagedStatusChanges[company.id])}
+                            className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-2 py-0.5 rounded text-[10px] font-bold transition-colors shadow-sm"
+                          >
+                            Get Verified
+                          </button>
+                          <button
+                            onClick={() => setStagedStatusChanges(prev => {
+                              const next = { ...prev };
+                              delete next[company.id];
+                              return next;
+                            })}
+                            className="bg-slate-100 text-slate-600 hover:bg-slate-200 px-2 py-0.5 rounded text-[10px] font-bold transition-colors shadow-sm"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    {company.status.toUpperCase() === 'HOT' && canEditCompany && (
+                    {(((company.status.toUpperCase() === 'HOT' || stagedStatusChanges[company.id] === 'HOT' || company.pending_status === 'HOT') && canEditCompany) || 
+                      ((company.status.toUpperCase() === 'REGISTERED' || stagedStatusChanges[company.id] === 'REGISTERED' || company.pending_status === 'REGISTERED') && isAdmin)) && (
                       <button onClick={() => handleUploadJD(company.id)} className="flex items-center gap-1 text-xs font-medium bg-secondary text-secondary-foreground px-2 py-1.5 rounded hover:bg-secondary/80">
                         <Upload className="h-3 w-3" />
                         JD
                       </button>
                     )}
+                    {(company.status.toUpperCase() === 'REGISTERED' || stagedStatusChanges[company.id] === 'REGISTERED' || company.pending_status === 'REGISTERED') && (
+                      <>
+                        {canEditCompany && (
+                          <>
+                            <button onClick={() => {
+                              setSelectedCompanyId(company.id);
+                              if (studentInputRef.current) {
+                                studentInputRef.current.setAttribute("data-upload-type", "registered");
+                                studentInputRef.current.click();
+                              }
+                            }} className="flex items-center gap-1 text-xs font-medium bg-purple-100 text-purple-700 px-2 py-1.5 rounded hover:bg-purple-200">
+                              <Upload className="h-3 w-3" />
+                              Reg Data
+                            </button>
+                            <button onClick={() => {
+                              setSelectedCompanyId(company.id);
+                              setShowManualRegModal(true);
+                            }} className="flex items-center gap-1 text-xs font-medium bg-purple-100 text-purple-700 px-2 py-1.5 rounded hover:bg-purple-200">
+                              <Plus className="h-3 w-3" />
+                              Add Manually
+                            </button>
+                          </>
+                        )}
+                        <button onClick={() => handlePreviewRegisteredStudents(company.id, company.name, company.status)} className="flex items-center gap-1 text-xs font-medium bg-white border border-slate-200 text-slate-700 px-2 py-1.5 rounded hover:bg-slate-50 shadow-sm">
+                          <Eye className="h-3 w-3" />
+                          Reg Students
+                        </button>
+                      </>
+                    )}
                     {company.status.toUpperCase() === 'DRIVE COMPLETED' && (
                       <>
                         {canEditCompany && (
-                          <button onClick={() => handleUploadStudents(company.id)} className="flex items-center gap-1 text-xs font-medium bg-blue-100 text-blue-700 px-2 py-1.5 rounded hover:bg-blue-200">
-                            <Upload className="h-3 w-3" />
-                            Data
-                          </button>
+                          <>
+                            <button onClick={() => {
+                              setSelectedCompanyId(company.id);
+                              if (studentInputRef.current) {
+                                studentInputRef.current.setAttribute("data-upload-type", "placed");
+                                studentInputRef.current.click();
+                              }
+                            }} className="flex items-center gap-1 text-xs font-medium bg-blue-100 text-blue-700 px-2 py-1.5 rounded hover:bg-blue-200">
+                              <Upload className="h-3 w-3" />
+                              Placed Data
+                            </button>
+                            <button onClick={() => {
+                              setSelectedCompanyId(company.id);
+                              setShowManualSelectedModal(true);
+                            }} className="flex items-center gap-1 text-xs font-medium bg-blue-100 text-blue-700 px-2 py-1.5 rounded hover:bg-blue-200">
+                              <Plus className="h-3 w-3" />
+                              Selected (Manual)
+                            </button>
+                          </>
                         )}
                         <button onClick={() => handleDownloadStudents(company.id, company.name)} className="flex items-center gap-1 text-xs font-medium bg-secondary text-secondary-foreground px-2 py-1.5 rounded hover:bg-secondary/80">
                           <Download className="h-3 w-3" />
@@ -520,7 +859,7 @@ export function TeamManagement() {
                         </button>
                         <button onClick={() => handlePreviewStudents(company.id, company.name, company.selected_count || 0)} className="flex items-center gap-1 text-xs font-medium bg-white border border-slate-200 text-slate-700 px-2 py-1.5 rounded hover:bg-slate-50 shadow-sm">
                           <Eye className="h-3 w-3" />
-                          Data
+                          Placed Students
                         </button>
                       </>
                     )}
@@ -549,14 +888,16 @@ export function TeamManagement() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-lg border bg-card p-6 shadow-lg">
             <h2 className="text-lg font-semibold mb-4">Add New Company</h2>
             <form onSubmit={handleAddCompany} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Company Name *</label>
                   <input required type="text" className="w-full rounded-md border px-3 py-2 text-sm" value={newCompany.name} onChange={e => setNewCompany({...newCompany, name: e.target.value})} />
@@ -566,7 +907,7 @@ export function TeamManagement() {
                   <input type="text" className="w-full rounded-md border px-3 py-2 text-sm" placeholder="Full Address" value={newCompany.address} onChange={e => setNewCompany({...newCompany, address: e.target.value})} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Location *</label>
                   <input required type="text" className="w-full rounded-md border px-3 py-2 text-sm" placeholder="e.g. Bangalore, Karnataka" value={newCompany.location} onChange={e => setNewCompany({...newCompany, location: e.target.value})} />
@@ -580,7 +921,7 @@ export function TeamManagement() {
                 <label className="text-sm font-medium">Official Website</label>
                 <input type="text" className="w-full rounded-md border px-3 py-2 text-sm" value={newCompany.website} onChange={e => setNewCompany({...newCompany, website: e.target.value})} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Contact Person *</label>
                   <input required type="text" className="w-full rounded-md border px-3 py-2 text-sm" value={newCompany.contact_person} onChange={e => setNewCompany({...newCompany, contact_person: e.target.value})} />
@@ -590,7 +931,7 @@ export function TeamManagement() {
                   <input required type="text" className="w-full rounded-md border px-3 py-2 text-sm" value={newCompany.phone} onChange={e => setNewCompany({...newCompany, phone: e.target.value})} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Email ID *</label>
                   <input required type="email" className="w-full rounded-md border px-3 py-2 text-sm" value={newCompany.email} onChange={e => setNewCompany({...newCompany, email: e.target.value})} />
@@ -629,7 +970,7 @@ export function TeamManagement() {
               </button>
             </div>
             <form onSubmit={handleEditCompanySubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Company Name *</label>
                   <input required type="text" className="w-full rounded-md border px-3 py-2 text-sm" value={editCompany.name} onChange={e => setEditCompany({...editCompany, name: e.target.value})} />
@@ -639,7 +980,7 @@ export function TeamManagement() {
                   <input type="text" className="w-full rounded-md border px-3 py-2 text-sm" placeholder="Full Address" value={editCompany.address || ""} onChange={e => setEditCompany({...editCompany, address: e.target.value})} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Location *</label>
                   <input required type="text" className="w-full rounded-md border px-3 py-2 text-sm" value={editCompany.location || ""} onChange={e => setEditCompany({...editCompany, location: e.target.value})} />
@@ -649,7 +990,7 @@ export function TeamManagement() {
                   <input type="url" className="w-full rounded-md border px-3 py-2 text-sm" value={editCompany.website || ""} onChange={e => setEditCompany({...editCompany, website: e.target.value})} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Contact Person *</label>
                   <input required type="text" className="w-full rounded-md border px-3 py-2 text-sm" value={editCompany.contact_person || ""} onChange={e => setEditCompany({...editCompany, contact_person: e.target.value})} />
@@ -659,7 +1000,7 @@ export function TeamManagement() {
                   <input type="text" className="w-full rounded-md border px-3 py-2 text-sm" value={editCompany.phone || ""} onChange={e => setEditCompany({...editCompany, phone: e.target.value})} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Email</label>
                   <input type="email" className="w-full rounded-md border px-3 py-2 text-sm" value={editCompany.email || ""} onChange={e => setEditCompany({...editCompany, email: e.target.value})} />
@@ -669,7 +1010,7 @@ export function TeamManagement() {
                   <input type="text" className="w-full rounded-md border px-3 py-2 text-sm" placeholder="e.g. 1000-5000" value={editCompany.size || ""} onChange={e => setEditCompany({...editCompany, size: e.target.value})} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Status</label>
                   <select className="w-full rounded-md border px-3 py-2 text-sm bg-white" value={editCompany.status || "COLD"} onChange={e => setEditCompany({...editCompany, status: e.target.value})}>
@@ -702,12 +1043,21 @@ export function TeamManagement() {
                 <Eye className="h-5 w-5 text-indigo-500" /> 
                 {previewTitle}
               </h2>
-              <button 
-                onClick={() => setShowPreviewModal(false)} 
-                className="text-slate-400 hover:text-slate-700 transition-colors p-1 rounded-md hover:bg-slate-200"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  placeholder="Search Name or Roll No..."
+                  value={selectedPreviewSearch}
+                  onChange={(e) => setSelectedPreviewSearch(e.target.value)}
+                  className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64"
+                />
+                <button 
+                  onClick={() => setShowPreviewModal(false)} 
+                  className="text-slate-400 hover:text-slate-700 transition-colors p-1 rounded-md hover:bg-slate-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
             
             <div className="flex-1 overflow-auto p-0">
@@ -741,7 +1091,14 @@ export function TeamManagement() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {previewData.map((row, r_idx) => (
+                      {previewData.filter(row => {
+                        if (!selectedPreviewSearch.trim()) return true;
+                        const s = selectedPreviewSearch.toLowerCase();
+                        return (row.roll_no?.toLowerCase().includes(s) || 
+                                row.name?.toLowerCase().includes(s) || 
+                                row['Roll No']?.toLowerCase().includes(s) || 
+                                row['Name']?.toLowerCase().includes(s));
+                      }).map((row, r_idx) => (
                         <tr key={r_idx} className="hover:bg-slate-50 transition-colors">
                           {previewColumns.map((col, c_idx) => (
                             <td key={c_idx} className="py-2.5 px-4 text-slate-700 border-r border-slate-100 last:border-0">
@@ -815,6 +1172,37 @@ export function TeamManagement() {
               <div className="flex justify-end gap-2 pt-4">
                 <button type="button" onClick={() => setShowEditStudentModal(false)} className="rounded-md px-4 py-2 text-sm font-medium hover:bg-muted">Cancel</button>
                 <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Registered Student Entry Modal */}
+      {showManualRegModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-lg border bg-white p-6 shadow-xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b">
+              <h2 className="text-lg font-semibold text-slate-800">Add Registered Students</h2>
+              <button onClick={() => setShowManualRegModal(false)} className="text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 rounded p-1 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleManualRegSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Roll Numbers (comma-separated)</label>
+                <textarea 
+                  required 
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm min-h-[100px] focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all" 
+                  placeholder="e.g. RCAS2024BIT048, RCAS2024BEC100" 
+                  value={manualRegRollNumbers} 
+                  onChange={e => setManualRegRollNumbers(e.target.value)} 
+                />
+                <p className="text-xs text-slate-500">Enter multiple roll numbers separated by commas.</p>
+              </div>
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button type="button" onClick={() => setShowManualRegModal(false)} className="rounded-md px-4 py-2 text-sm font-medium border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors">Cancel</button>
+                <button type="submit" className="rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 shadow-sm transition-colors">Add Students</button>
               </div>
             </form>
           </div>
@@ -937,8 +1325,14 @@ export function TeamManagement() {
                         </div>
                       </div>
                       <div className="mt-4 flex items-center justify-between">
-                        <span className={`px-2.5 py-1 text-[11px] font-bold rounded-full ${member.role.toLowerCase() === 'manager' ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {member.role}
+                        <span className={`px-2.5 py-1 text-[11px] font-bold rounded-full ${
+                          member.role.toLowerCase() === 'admin' ? 'bg-red-100 text-red-700' :
+                          member.role.toLowerCase() === 'manager' ? 'bg-indigo-100 text-indigo-700' : 
+                          member.role.toLowerCase() === 'placement_lead' ? 'bg-amber-100 text-amber-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>
+                          {member.role === 'placement_lead' ? 'Placement Lead' : 
+                           member.role === 'admin' ? 'Admin' : member.role}
                         </span>
                       </div>
                     </div>
@@ -1008,6 +1402,7 @@ export function TeamManagement() {
                   onChange={(e) => setMemberFormData({...memberFormData, role: e.target.value})}
                 >
                   <option value="Manager">Manager</option>
+                  <option value="placement_lead">Placement Lead</option>
                   <option value="Member">Member</option>
                 </select>
               </div>
@@ -1066,6 +1461,7 @@ export function TeamManagement() {
                   onChange={(e) => setMemberFormData({...memberFormData, role: e.target.value})}
                 >
                   <option value="Manager">Manager</option>
+                  <option value="placement_lead">Placement Lead</option>
                   <option value="Member">Member</option>
                 </select>
               </div>
@@ -1073,6 +1469,211 @@ export function TeamManagement() {
               <div className="pt-2">
                 <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold h-11 rounded-xl transition-all shadow-md">
                   Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Selected Students Modal */}
+      {showManualSelectedModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl border bg-white shadow-xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b bg-slate-50 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-800">Add Selected Students Manually</h2>
+              <button onClick={() => setShowManualSelectedModal(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1 rounded-md shadow-sm border">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleManualSelectedSubmit} className="p-6 space-y-4">
+              <p className="text-sm text-slate-600">Enter students (one per line). Format: <b>RollNo, CTC</b> (or just RollNo if using global CTC below).</p>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Global CTC (Optional)</label>
+                <input 
+                  type="text" 
+                  value={manualSelectedCTC} 
+                  onChange={e => setManualSelectedCTC(e.target.value)}
+                  placeholder="e.g. 8.5 (Applies to all without a specific CTC)"
+                  className="w-full p-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Students List</label>
+                <textarea 
+                  value={manualSelectedRollNumbers} 
+                  onChange={e => setManualSelectedRollNumbers(e.target.value)}
+                  placeholder="21IT001, 8.5&#10;21IT002, 7.0&#10;21IT003"
+                  className="w-full h-32 p-3 text-sm border rounded-md font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+              <div className="flex justify-end pt-2 gap-3">
+                <button type="button" onClick={() => setShowManualSelectedModal(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border hover:bg-slate-50 rounded-md">
+                  Cancel
+                </button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md">
+                  Add Students
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Registered Students Preview Modal */}
+      {showRegPreviewModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="w-full max-w-5xl rounded-lg border bg-white p-6 shadow-xl my-8 min-h-[50vh]">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b">
+              <h2 className="text-xl font-bold text-slate-800">{previewTitle}</h2>
+              <button onClick={() => setShowRegPreviewModal(false)} className="text-slate-400 hover:text-slate-600 bg-slate-100 p-1.5 rounded-md">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex gap-2">
+                {regPreviewCompanyStatus === 'DRIVE COMPLETED' && (
+                  <select 
+                    value={regFilter} 
+                    onChange={e => setRegFilter(e.target.value)}
+                    className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                  >
+                    <option value="ALL">All Students</option>
+                    <option value="ATTENDED">Attended</option>
+                    <option value="NOT_ATTENDED">Not Attended</option>
+                  </select>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {regPreviewCompanyStatus === 'DRIVE COMPLETED' && (
+                  <>
+                    <button 
+                      onClick={() => setShowBulkAttendManualModal(true)}
+                      className="flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-md text-sm font-medium text-slate-700"
+                    >
+                      <Plus className="h-4 w-4" /> Manual Attend
+                    </button>
+                    <button 
+                      onClick={() => bulkAttendInputRef.current?.click()}
+                      className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-md text-sm font-medium"
+                    >
+                      <Upload className="h-4 w-4" /> Excel Attend
+                    </button>
+                    <input 
+                      type="file" 
+                      ref={bulkAttendInputRef} 
+                      className="hidden" 
+                      accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                      onChange={handleBulkAttendUpload} 
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+
+            {previewLoading ? (
+              <div className="flex justify-center items-center h-64 text-slate-500">Loading registered students...</div>
+            ) : regPreviewData.length === 0 ? (
+              <div className="flex justify-center items-center h-64 text-slate-500">No registered students found for this company.</div>
+            ) : (
+              <div className="overflow-x-auto border rounded-md">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-100 text-slate-700">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold">Roll No</th>
+                      <th className="px-4 py-3 font-semibold">Name</th>
+                      <th className="px-4 py-3 font-semibold">Department</th>
+                      <th className="px-4 py-3 font-semibold">Match Status</th>
+                      {regPreviewCompanyStatus === 'DRIVE COMPLETED' && (
+                        <th className="px-4 py-3 font-semibold text-center">Attended</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {regPreviewData.filter(s => {
+                      if (regFilter === "ATTENDED") return s.attended;
+                      if (regFilter === "NOT_ATTENDED") return !s.attended;
+                      return true;
+                    }).map((student, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-medium">{student.roll_no}</td>
+                        <td className="px-4 py-3">{student.name}</td>
+                        <td className="px-4 py-3">{student.department}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${student.match_status === 'Excellent Match' ? 'bg-green-100 text-green-700' : student.match_status === 'Good Match' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                            {student.match_status}
+                          </span>
+                        </td>
+                        {regPreviewCompanyStatus === 'DRIVE COMPLETED' && (
+                          <td className="px-4 py-3 text-center">
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                className="sr-only peer"
+                                checked={student.attended || false}
+                                onChange={() => toggleStudentAttendance(student.roll_no, student.attended || false)}
+                              />
+                              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                            </label>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Attend Manual Modal */}
+      {showBulkAttendManualModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-lg border bg-white p-6 shadow-xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <Plus className="h-5 w-5 text-indigo-500" />
+                Add Attended Students
+              </h2>
+              <button onClick={() => setShowBulkAttendManualModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleBulkAttendManualSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-slate-700 block">
+                  Roll Numbers (comma-separated)
+                </label>
+                <textarea
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  rows={4}
+                  placeholder="e.g. 21IT001, 21IT002, 21IT003"
+                  value={bulkAttendRollNumbers}
+                  onChange={(e) => setBulkAttendRollNumbers(e.target.value)}
+                  required
+                />
+                <p className="text-xs text-slate-500">
+                  Enter the roll numbers of the students who attended this drive.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkAttendManualModal(false)}
+                  className="px-4 py-2 rounded-md border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 font-medium text-sm transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 font-medium text-sm transition-colors"
+                >
+                  Mark Attended
                 </button>
               </div>
             </form>

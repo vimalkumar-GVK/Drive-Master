@@ -7,6 +7,7 @@ import pandas as pd
 import io
 from datetime import datetime
 from bson import ObjectId
+from typing import Optional
 
 router = APIRouter()
 
@@ -152,29 +153,65 @@ async def export_unplaced_students(
 @router.get("/export/students/company/{company_id}")
 async def export_company_students(
     company_id: str,
+    type: Optional[str] = "selected",
     current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
 ):
     db = get_database()
-    placed = await db["placed_students"].find({"company_id": company_id}).to_list(length=5000)
     
-    if not placed:
-        raise HTTPException(status_code=404, detail="No selected students found for this company")
+    # Get company info first
+    company = await db["companies"].find_one({"_id": ObjectId(company_id)})
+    company_name = company.get("name", "Company") if company else "Company"
+
+    if type == "selected":
+        placed = await db["placed_students"].find({"company_id": company_id}).to_list(length=5000)
+        if not placed:
+            raise HTTPException(status_code=404, detail="No selected students found for this company")
+        data = []
+        for i, p in enumerate(placed):
+            data.append({
+                "S.No": i + 1,
+                "Roll No": p.get("roll_no"),
+                "Name": p.get("name"),
+                "Department": p.get("department"),
+                "Company": p.get("company_name", company_name),
+                "CTC (LPA)": p.get("ctc_lpa")
+            })
+        filename = f"Selected_Students_{company_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
         
-    data = []
-    company_name = placed[0].get("company_name", "Company") if placed else "Company"
-    
-    for i, p in enumerate(placed):
-        data.append({
-            "S.No": i + 1,
-            "Roll No": p.get("roll_no"),
-            "Name": p.get("name"),
-            "Department": p.get("department"),
-            "Company": p.get("company_name"),
-            "CTC (LPA)": p.get("ctc_lpa")
-        })
+    elif type in ["attended", "registered"]:
+        query = {"company_id": company_id}
+        if type == "attended":
+            query["attended"] = True
+            
+        reg_records = await db["company_registered_students"].find(query).to_list(length=5000)
+        if not reg_records:
+            raise HTTPException(status_code=404, detail=f"No {type} students found for this company")
+            
+        roll_numbers = [r["roll_no"] for r in reg_records]
+        students_cursor = db["students"].find({"roll_no": {"$in": roll_numbers}})
+        students = await students_cursor.to_list(length=5000)
+        student_map = {s["roll_no"]: s for s in students}
+        
+        data = []
+        for i, r in enumerate(reg_records):
+            roll = r["roll_no"]
+            s = student_map.get(roll, {})
+            row = {
+                "S.No": i + 1,
+                "Roll No": roll,
+                "Name": s.get("name", ""),
+                "Department": s.get("department", ""),
+                "Company": company_name,
+                "ATS Score": r.get("ats_score", 0),
+                "Match Status": r.get("match_status", "Pending Analysis")
+            }
+            if type == "registered":
+                row["Attended"] = "Yes" if r.get("attended") else "No"
+            data.append(row)
+            
+        filename = f"{type.capitalize()}_Students_{company_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
         
     df = pd.DataFrame(data)
-    filename = f"Selected_Students_{company_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
     return create_excel_response(df, filename)
 
 @router.get("/preview/companies")
@@ -307,30 +344,68 @@ async def preview_unplaced_students(
 @router.get("/preview/students/company/{company_id}")
 async def preview_company_students(
     company_id: str,
+    type: Optional[str] = "selected",
     current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
 ):
     db = get_database()
-    placed = await db["placed_students"].find({"company_id": company_id}).to_list(length=5000)
     
-    if not placed:
-        raise HTTPException(status_code=404, detail="No selected students found for this company")
+    company = await db["companies"].find_one({"_id": ObjectId(company_id)})
+    company_name = company.get("name", "Company") if company else "Company"
+
+    if type == "selected":
+        placed = await db["placed_students"].find({"company_id": company_id}).to_list(length=5000)
+        if not placed:
+            raise HTTPException(status_code=404, detail="No selected students found for this company")
+            
+        data = []
+        columns = ["S.No", "Roll No", "Name", "Department", "Company", "CTC (LPA)"]
+        for i, p in enumerate(placed):
+            data.append({
+                "_id": str(p["_id"]),
+                "S.No": i + 1,
+                "Roll No": p.get("roll_no"),
+                "Name": p.get("name"),
+                "Department": p.get("department"),
+                "Company": p.get("company_name", company_name),
+                "CTC (LPA)": p.get("ctc_lpa")
+            })
+            
+    elif type in ["attended", "registered"]:
+        query = {"company_id": company_id}
+        if type == "attended":
+            query["attended"] = True
+            
+        reg_records = await db["company_registered_students"].find(query).to_list(length=5000)
+        if not reg_records:
+            raise HTTPException(status_code=404, detail=f"No {type} students found for this company")
+            
+        roll_numbers = [r["roll_no"] for r in reg_records]
+        students_cursor = db["students"].find({"roll_no": {"$in": roll_numbers}})
+        students = await students_cursor.to_list(length=5000)
+        student_map = {s["roll_no"]: s for s in students}
         
-    data = []
-    company_name = placed[0].get("company_name", "Company") if placed else "Company"
-    
-    columns = ["S.No", "Roll No", "Name", "Department", "Company", "CTC (LPA)"]
-    for i, p in enumerate(placed):
-        data.append({
-            "_id": str(p["_id"]),
-            "S.No": i + 1,
-            "Roll No": p.get("roll_no"),
-            "Name": p.get("name"),
-            "Department": p.get("department"),
-            "Company": p.get("company_name"),
-            "CTC (LPA)": p.get("ctc_lpa")
-        })
-        
-    
+        data = []
+        columns = ["S.No", "Roll No", "Name", "Department", "Company", "ATS Score", "Match Status"]
+        if type == "registered":
+            columns.append("Attended")
+            
+        for i, r in enumerate(reg_records):
+            roll = r["roll_no"]
+            s = student_map.get(roll, {})
+            row = {
+                "_id": str(r.get("_id", "")),
+                "S.No": i + 1,
+                "Roll No": roll,
+                "Name": s.get("name", ""),
+                "Department": s.get("department", ""),
+                "Company": company_name,
+                "ATS Score": r.get("ats_score", 0),
+                "Match Status": r.get("match_status", "Pending Analysis")
+            }
+            if type == "registered":
+                row["Attended"] = "Yes" if r.get("attended") else "No"
+            data.append(row)
+
     if not data:
         return {"columns": [], "data": []}
     return {"columns": columns, "data": data}

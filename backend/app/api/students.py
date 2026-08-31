@@ -37,7 +37,7 @@ class StudentManualEntry(BaseModel):
 @router.post("/admin/students")
 async def add_student_manually(
     student: StudentManualEntry,
-    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER]))
 ):
     db = get_database()
     student_dict = student.model_dump()
@@ -67,7 +67,7 @@ async def add_student_manually(
 async def upload_students_excel(
     file: UploadFile = File(...),
     mode: str = Query("upsert"),
-    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER]))
 ):
     if not file.filename.endswith(('.xlsx', '.csv')):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload .xlsx or .csv")
@@ -185,7 +185,7 @@ async def get_students_for_admin(
 ):
     db = get_database()
     cursor = db["students"].find({"is_deleted": {"$ne": True}})
-    students = await cursor.to_list(length=100)
+    students = await cursor.to_list(length=10000)
     # Fetch placed students to determine status
     placed_cursor = db["placed_students"].find({})
     placed_docs = await placed_cursor.to_list(length=10000)
@@ -221,7 +221,7 @@ async def get_trashed_students_for_admin(
 ):
     db = get_database()
     cursor = db["students"].find({"is_deleted": True})
-    students = await cursor.to_list(length=100)
+    students = await cursor.to_list(length=10000)
     
     result = []
     for s in students:
@@ -244,7 +244,7 @@ async def get_trashed_students_for_admin(
 @router.delete("/admin/students/{student_id}")
 async def delete_student(
     student_id: str,
-    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER]))
 ):
     db = get_database()
     existing_student = await db["students"].find_one({"_id": ObjectId(student_id)})
@@ -275,7 +275,7 @@ async def delete_student(
 @router.post("/admin/students/{student_id}/restore")
 async def restore_student(
     student_id: str,
-    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER]))
 ):
     db = get_database()
     existing_student = await db["students"].find_one({"_id": ObjectId(student_id)})
@@ -306,7 +306,7 @@ async def restore_student(
 @router.delete("/admin/students/{student_id}/permanent")
 async def permanent_delete_student(
     student_id: str,
-    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER]))
 ):
     db = get_database()
     existing_student = await db["students"].find_one({"_id": ObjectId(student_id)})
@@ -333,7 +333,7 @@ async def permanent_delete_student(
 async def update_student(
     student_id: str,
     student: StudentManualEntry,
-    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER]))
 ):
     db = get_database()
     existing_student = await db["students"].find_one({"_id": ObjectId(student_id)})
@@ -370,7 +370,7 @@ async def get_ats_analysis(
     
     # Fetch ATS records
     students_cursor = db["students"].find({"is_deleted": {"$ne": True}}, {"roll_no": 1, "name": 1, "department": 1, "resume_url": 1, "resume_quality": 1})
-    students_docs = await students_cursor.to_list(length=100)
+    students_docs = await students_cursor.to_list(length=10000)
     
     analysis = []
     for s in students_docs:
@@ -389,7 +389,7 @@ async def get_ats_analysis(
 @router.post("/admin/students/{roll_no}/calculate-quality")
 async def calculate_student_quality(
     roll_no: str,
-    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER]))
 ):
     db = get_database()
     student = await db["students"].find_one({"roll_no": roll_no})

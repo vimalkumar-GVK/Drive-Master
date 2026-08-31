@@ -9,6 +9,7 @@ import { Reports } from './pages/admin/Reports';
 
 import { Login } from './pages/Login';
 import { LandingPage } from './pages/LandingPage';
+import { Settings } from './pages/admin/Settings';
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,7 @@ function App() {
             <Route path="/admin/team" element={<TeamManagement />} />
             <Route path="/admin/recruiters" element={<RecruiterPipeline />} />
             <Route path="/admin/reports" element={<Reports />} />
+            <Route path="/admin/settings" element={<Settings />} />
             <Route path="/admin/*" element={<Navigate to="/admin" replace />} />
           </Route>
           
@@ -37,6 +39,7 @@ function App() {
             <Route path="/manager/team" element={<TeamManagement />} />
             <Route path="/manager/recruiters" element={<RecruiterPipeline />} />
             <Route path="/manager/reports" element={<Reports />} />
+            <Route path="/manager/settings" element={<Settings />} />
             <Route path="/manager/*" element={<Navigate to="/manager" replace />} />
           </Route>
 
@@ -47,6 +50,7 @@ function App() {
             <Route path="/placement_lead/team" element={<TeamManagement />} />
             <Route path="/placement_lead/recruiters" element={<RecruiterPipeline />} />
             <Route path="/placement_lead/reports" element={<Reports />} />
+            <Route path="/placement_lead/settings" element={<Settings />} />
             <Route path="/placement_lead/*" element={<Navigate to="/placement_lead" replace />} />
           </Route>
           

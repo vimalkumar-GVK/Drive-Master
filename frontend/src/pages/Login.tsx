@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { 
-  Mail, Lock, ArrowLeft, Brain, Eye, EyeOff, Loader2, Target, BarChart
+  Mail, Lock, ArrowLeft, Eye, EyeOff, Loader2, Target, BarChart
 } from "lucide-react";
 
 export function Login() {
@@ -59,9 +59,13 @@ export function Login() {
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     const em = email.toLowerCase();
+    
+    // Set a dummy token so the backend can identify the user
+    localStorage.setItem('token', `dummy_token_${em}`);
+    
     if (em.includes("manager")) {
       navigate("/manager");
-    } else if (em.includes("lead")) {
+    } else if (em.includes("lead") || em.includes("leed")) {
       navigate("/placement_lead");
     } else {
       navigate("/admin");
@@ -84,11 +88,8 @@ export function Login() {
         
         {/* Header */}
         <div className="relative z-20 flex items-center gap-2">
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.5)] group-hover:scale-110 transition-transform">
-              <Brain className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-2xl font-extrabold tracking-tight text-white">PlacementAI</span>
+          <Link to="/" className="flex items-center gap-2 group bg-white p-2 rounded-xl w-max shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:scale-[1.02] transition-transform">
+            <img src="/logo-full.png" alt="Rathinam College of Arts & Science" className="h-10 object-contain" />
           </Link>
         </div>
 
@@ -171,10 +172,8 @@ export function Login() {
         {/* Mobile Header (Only visible on small screens) */}
         <div className="lg:hidden absolute top-8 left-8 z-20">
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.5)]">
-              <Brain className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-2xl font-bold tracking-tight text-white">PlacementAI</span>
+            <img src="/rgu-logo.png" alt="Rathinam Global University" className="h-8 object-contain" />
+            <span className="text-xl font-bold tracking-tight text-white hidden sm:block">RGU Placement Portal</span>
           </Link>
         </div>
 

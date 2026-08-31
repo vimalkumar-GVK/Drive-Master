@@ -5,6 +5,7 @@ import api from "../../lib/api";
 export function Reports() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
+  const [companyReportType, setCompanyReportType] = useState<string>("selected");
   const [isDownloading, setIsDownloading] = useState(false);
   
   // Preview State
@@ -219,12 +220,12 @@ export function Reports() {
               <FileSpreadsheet className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">Company-wise Selection Report</h3>
-              <p className="text-sm text-muted-foreground">Download the selected students list for a specific company.</p>
+              <h3 className="font-semibold text-lg">Company-wise Student Report</h3>
+              <p className="text-sm text-muted-foreground">Download the students list based on their status for a specific company.</p>
             </div>
           </div>
-          <div className="pt-4 flex items-center justify-between border-t border-border">
-            <div className="flex items-center gap-4 w-full md:w-auto mt-4 md:mt-0">
+          <div className="pt-4 flex flex-col md:flex-row items-start md:items-center justify-between border-t border-border gap-4">
+            <div className="flex items-center gap-4 w-full md:w-auto">
               <label className="text-sm font-medium text-slate-700 whitespace-nowrap">Select Company:</label>
               <select
                 className="rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-full md:w-64"
@@ -236,6 +237,19 @@ export function Reports() {
                 ))}
               </select>
             </div>
+            
+            <div className="flex items-center gap-4 w-full md:w-auto">
+              <label className="text-sm font-medium text-slate-700 whitespace-nowrap">Category:</label>
+              <select
+                className="rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-full md:w-48"
+                value={companyReportType}
+                onChange={(e) => setCompanyReportType(e.target.value)}
+              >
+                <option value="selected">Selected Students</option>
+                <option value="attended">Attended Students</option>
+                <option value="registered">Registered Students</option>
+              </select>
+            </div>
           </div>
           
           <div className="pt-4 flex items-center justify-end gap-2 border-t border-border">
@@ -243,7 +257,7 @@ export function Reports() {
               onClick={() => {
                 if(!selectedCompanyId) return;
                 const cname = companies.find(c => c.id === selectedCompanyId)?.name || 'Company';
-                handlePreview(`/reports/preview/students/company/${selectedCompanyId}`, `Company Selection - ${cname}`);
+                handlePreview(`/reports/preview/students/company/${selectedCompanyId}?type=${companyReportType}`, `Company ${companyReportType.charAt(0).toUpperCase() + companyReportType.slice(1)} - ${cname}`);
               }}
               disabled={!selectedCompanyId || isDownloading}
               className="flex items-center gap-2 rounded-md bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
@@ -251,18 +265,19 @@ export function Reports() {
               <Eye className="h-4 w-4" />
               Preview
             </button>
-              <button 
-                onClick={() => {
-                  if(!selectedCompanyId) return;
-                  const cname = companies.find(c => c.id === selectedCompanyId)?.name || 'Company';
-                  handleDownload(`/reports/export/students/company/${selectedCompanyId}`, `Selected_Students_${cname.replace(/ /g, '_')}.xlsx`);
-                }}
-                disabled={!selectedCompanyId || isDownloading}
-                className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
-                <Download className="h-4 w-4" />
-                Download Report
-              </button>
+            <button 
+              onClick={() => {
+                if(!selectedCompanyId) return;
+                const cname = companies.find(c => c.id === selectedCompanyId)?.name || 'Company';
+                handleDownload(`/reports/export/students/company/${selectedCompanyId}?type=${companyReportType}`, `${companyReportType.charAt(0).toUpperCase() + companyReportType.slice(1)}_Students_${cname.replace(/ /g, '_')}.xlsx`);
+              }}
+              disabled={!selectedCompanyId || isDownloading}
+              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              Download Report
+            </button>
+
             </div>
           </div>
 
