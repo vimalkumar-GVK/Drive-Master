@@ -248,6 +248,28 @@ async def get_status_requests(
         
     return result
 
+@router.get("/status_requests/history")
+async def get_status_requests_history(
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN]))
+):
+    db = get_database()
+    cursor = db["companies"].find({"status_history": {"$exists": True, "$not": {"$size": 0}}})
+    companies = await cursor.to_list(length=1000)
+    
+    history_list = []
+    for c in companies:
+        company_id = str(c["_id"])
+        company_name = c.get("name", "Unknown Company")
+        for entry in c.get("status_history", []):
+            entry_copy = dict(entry)
+            entry_copy["company_id"] = company_id
+            entry_copy["company_name"] = company_name
+            history_list.append(entry_copy)
+            
+    # Sort descending by resolved_at
+    history_list.sort(key=lambda x: x.get("resolved_at", ""), reverse=True)
+    return history_list
+
 @router.post("/{company_id}/status/approve")
 async def approve_company_status(
     company_id: str,
@@ -263,6 +285,16 @@ async def approve_company_status(
     if not company or not company.get("pending_status"):
         raise HTTPException(status_code=404, detail="No pending status request found for this company")
         
+    history_entry = {
+        "requested_status": company["pending_status"],
+        "requested_by": company.get("status_requested_by", "Unknown"),
+        "requested_role": company.get("status_requested_role", "Unknown"),
+        "requested_at": company.get("status_requested_at", datetime.utcnow().isoformat()),
+        "action": "APPROVED",
+        "resolved_at": datetime.utcnow().isoformat(),
+        "resolved_by": current_user.email
+    }
+
     res = await db["companies"].update_one(
         {"_id": obj_id},
         {
@@ -272,7 +304,8 @@ async def approve_company_status(
                 "status_requested_by": "",
                 "status_requested_role": "",
                 "status_requested_at": ""
-            }
+            },
+            "$push": {"status_history": history_entry}
         }
     )
     
@@ -289,6 +322,20 @@ async def reject_company_status(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid company ID")
         
+    company = await db["companies"].find_one({"_id": obj_id})
+    if not company or not company.get("pending_status"):
+        raise HTTPException(status_code=404, detail="No pending status request found for this company")
+        
+    history_entry = {
+        "requested_status": company["pending_status"],
+        "requested_by": company.get("status_requested_by", "Unknown"),
+        "requested_role": company.get("status_requested_role", "Unknown"),
+        "requested_at": company.get("status_requested_at", datetime.utcnow().isoformat()),
+        "action": "REJECTED",
+        "resolved_at": datetime.utcnow().isoformat(),
+        "resolved_by": current_user.email
+    }
+
     res = await db["companies"].update_one(
         {"_id": obj_id},
         {
@@ -297,7 +344,8 @@ async def reject_company_status(
                 "status_requested_by": "",
                 "status_requested_role": "",
                 "status_requested_at": ""
-            }
+            },
+            "$push": {"status_history": history_entry}
         }
     )
     

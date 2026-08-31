@@ -242,6 +242,23 @@ export function RecruiterPipeline() {
     document.body.removeChild(link);
   };
 
+  const downloadRegisteredExcel = () => {
+    if (registeredStudents.length === 0) return;
+    const headers = ["S.No,Roll No,Name,Department,ATS Score,Match Status,Company"];
+    const escapeCsv = (str: any) => `"${String(str).replace(/"/g, '""')}"`;
+    const rows = registeredStudents.map((s, i) => 
+      `${i+1},${escapeCsv(s.roll_no || '')},${escapeCsv(s.name || '')},${escapeCsv(s.department || '')},${escapeCsv((s.ats_score || 0) + '%')},${escapeCsv(s.match_status || 'Unknown')},${escapeCsv(selectedCompanyName || '')}`
+    );
+    const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${selectedCompanyName}_Registered_Students_ATS.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (!workflow) return <div className="p-8 text-center text-slate-500 animate-pulse">Loading Placement Team Workflow...</div>;
 
   // Flatten and mock data for UI
@@ -288,19 +305,8 @@ export function RecruiterPipeline() {
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Companies — Recruiting Overview</h1>
-          <p className="text-sm text-slate-500 mt-1">Last updated • {currentDate}, {currentTime}</p>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          {canEdit && (
-            <button 
-              onClick={() => setShowAddCompanyModal(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all hover:-translate-y-0.5"
-            >
-              <Plus className="h-4 w-4" /> Add Company
-            </button>
-          )}
+          <h1 className="text-2xl font-bold text-slate-800">Recruiters Pipeline</h1>
+          <p className="text-sm text-slate-500 mt-1">Read-only overview of recruiting progress • Last updated: {currentDate}, {currentTime}</p>
         </div>
       </div>
 
@@ -482,12 +488,6 @@ export function RecruiterPipeline() {
                       {company.status === 'Hot' ? (
                         <>
                           <button onClick={() => handleViewRegisteredStudents(company.id, company.company)} className="hover:text-red-600 transition-colors text-red-500" title="View Registered Students (ATS Match)"><Users className="h-4 w-4" /></button>
-                          {canEdit && (
-                            <label className="hover:text-purple-600 transition-colors text-purple-500 cursor-pointer flex items-center" title="Upload Registered Students">
-                              {isUploading ? <div className="h-4 w-4 rounded-full border-2 border-purple-500 border-t-transparent animate-spin"></div> : <Upload className="h-4 w-4" />}
-                              <input type="file" className="hidden" accept=".csv,.xlsx" onChange={(e) => handleUploadRegisteredStudents(e, company.id, company.company)} disabled={isUploading} />
-                            </label>
-                          )}
                         </>
                       ) : null}
                       <button onClick={() => { setPreviewCompany(company); setShowPreviewCompanyModal(true); }} className="hover:text-emerald-600 transition-colors" title="View Company Details"><Eye className="h-4 w-4" /></button>
@@ -550,12 +550,6 @@ export function RecruiterPipeline() {
               >
                 <X className="h-4 w-4" /> Back / Close
               </button>
-
-              {canEdit && (
-                <button className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 bg-red-50/50 font-semibold text-sm rounded-lg transition-colors">
-                  <Trash2 className="h-4 w-4" /> Delete Selected
-                </button>
-              )}
               <button 
                 onClick={downloadExcel}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-lg transition-colors shadow-sm"
@@ -871,9 +865,17 @@ export function RecruiterPipeline() {
                 </h2>
                 <p className="text-sm text-slate-500 mt-1">ATS Match scores based on student resumes vs job description.</p>
               </div>
-              <button onClick={() => setShowRegisteredModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="h-6 w-6" />
-              </button>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={downloadRegisteredExcel}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-semibold text-xs rounded-lg transition-colors shadow-sm border border-emerald-200"
+                >
+                  <Download className="h-3.5 w-3.5" /> Export Excel
+                </button>
+                <button onClick={() => setShowRegisteredModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
             </div>
             
             <div className="flex-1 overflow-auto bg-slate-50 p-6">

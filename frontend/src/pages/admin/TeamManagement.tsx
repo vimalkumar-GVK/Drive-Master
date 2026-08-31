@@ -506,13 +506,16 @@ export function TeamManagement() {
 
   const [activeTab, setActiveTab] = useState<'pipeline' | 'approvals'>('pipeline');
   const [statusRequests, setStatusRequests] = useState<any[]>([]);
+  const [statusHistory, setStatusHistory] = useState<any[]>([]);
 
   const fetchStatusRequests = async () => {
     try {
       const res = await api.get("/companies/status_requests");
       setStatusRequests(res.data);
-    } catch (err) {
-      console.error("Failed to fetch status requests:", err);
+      const historyRes = await api.get("/companies/status_requests/history");
+      setStatusHistory(historyRes.data);
+    } catch (error) {
+      console.error("Failed to fetch status requests:", error);
     }
   };
 
@@ -549,7 +552,7 @@ export function TeamManagement() {
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <h1 className="text-3xl font-bold tracking-tight">Recruiters Pipeline</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Placement Team & Industry</h1>
           {isAdmin && (
             <div className="flex bg-slate-100 p-1 rounded-lg">
               <button
@@ -675,6 +678,48 @@ export function TeamManagement() {
               </table>
             </div>
           )}
+
+          {/* Approval History Section */}
+          <div className="mt-8 border-t border-slate-200">
+            <div className="p-6 border-b border-slate-200">
+              <h2 className="text-lg font-bold text-slate-800">Approval History</h2>
+              <p className="text-sm text-slate-500">Record of previously approved or rejected status requests</p>
+            </div>
+            {statusHistory.length === 0 ? (
+              <div className="p-8 text-center text-slate-500">No approval history found</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Company</th>
+                      <th className="px-4 py-3 font-medium">Requested Status</th>
+                      <th className="px-4 py-3 font-medium">Requested By</th>
+                      <th className="px-4 py-3 font-medium">Action</th>
+                      <th className="px-4 py-3 font-medium">Resolved By</th>
+                      <th className="px-4 py-3 font-medium">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {statusHistory.map((req, idx) => (
+                      <tr key={idx} className="hover:bg-muted/50">
+                        <td className="px-4 py-3 font-semibold">{req.company_name}</td>
+                        <td className="px-4 py-3"><span className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${getStatusColor(req.requested_status)}`}>{req.requested_status}</span></td>
+                        <td className="px-4 py-3 text-slate-600">{req.requested_by}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-bold ${req.action === 'APPROVED' ? 'text-green-600' : 'text-red-600'}`}>{req.action}</span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">{req.resolved_by}</td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">
+                          {new Date(req.resolved_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
       <div className="rounded-md border bg-card overflow-hidden">
