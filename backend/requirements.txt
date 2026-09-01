@@ -17,3 +17,5 @@ scikit-learn
 PyPDF2
 requests
 sentence-transformers
+
+resend==2.42.0

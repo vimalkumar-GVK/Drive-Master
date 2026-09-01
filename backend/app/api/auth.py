@@ -80,38 +80,46 @@ class ResetPasswordRequest(BaseModel):
 import os
 
 def send_email_sync(to_email: str, otp: str):
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
     import os
+    import resend
     from datetime import datetime, timedelta
 
     try:
-        MAIL_USERNAME = os.getenv("MAIL_USERNAME")
-        MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
-        MAIL_FROM = os.getenv("MAIL_FROM", MAIL_USERNAME)
+        # Load the Resend API Key
+        RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+        if not RESEND_API_KEY:
+            print("EMAIL FAILED: RESEND_API_KEY is not set.")
+            return
 
-        msg = MIMEMultipart()
-        msg['From'] = MAIL_FROM
-        msg['To'] = to_email
-        msg['Subject'] = f"RGU Drive Master OTP - {otp} (5 min valid)"
+        resend.api_key = RESEND_API_KEY
+        
+        # Resend requires a verified domain to send from. 
+        # If you don't have a custom domain verified in Resend yet, 
+        # you MUST use their testing email address: "onboarding@resend.dev"
+        MAIL_FROM = os.getenv("MAIL_FROM", "onboarding@resend.dev")
 
-        html = f"""
+        html_content = f"""
         <div style="font-family:Arial;padding:20px">
           <h2>RGU Drive Master</h2>
           <p>Your OTP: <b style="font-size:28px;letter-spacing:5px">{otp}</b></p>
           <p style="color:red">Valid for 5 minutes only. Expires at {(datetime.utcnow() + timedelta(minutes=5)).strftime('%H:%M:%S UTC')}</p>
         </div>
         """
-        msg.attach(MIMEText(html, 'html'))
 
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
-            server.starttls()
-            server.login(MAIL_USERNAME, MAIL_PASSWORD)
-            server.send_message(msg)
-        print(f"Email sent to {to_email}")
+        # Construct the Resend payload
+        params = {
+            "from": f"RGU Drive Master <{MAIL_FROM}>",
+            "to": [to_email],
+            "subject": f"RGU Drive Master OTP - {otp} (5 min valid)",
+            "html": html_content
+        }
+
+        # Send the email via HTTP POST
+        email = resend.Emails.send(params)
+        print(f"Email sent successfully to {to_email}. Resend ID: {email['id']}")
+
     except Exception as e:
-        print(f"EMAIL FAILED: {e}")
+        print(f"EMAIL FAILED: {str(e)}")
 
 @router.post("/forgot-password")
 async def forgot_password(request: ForgotPasswordRequest, background_tasks: BackgroundTasks):
