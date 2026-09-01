@@ -67,7 +67,7 @@ export function Login() {
       // Assuming api instance from "../../lib/api" is available? Wait, import it.
       // Let's import it at the top
       
-      const res = await fetch("http://localhost:8000/api/v1/auth/login", {
+      const res = await fetch((import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1") + "/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",

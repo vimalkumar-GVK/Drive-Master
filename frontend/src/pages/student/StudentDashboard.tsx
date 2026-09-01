@@ -61,7 +61,7 @@ export function StudentDashboard() {
   const { data: jobs = [] } = useQuery<Job[]>({
     queryKey: ['jobs'],
     queryFn: async () => {
-      const res = await fetch("http://localhost:8000/api/v1/jobs");
+      const res = await fetch((import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1") + "/jobs");
       if (!res.ok) throw new Error("Failed to load jobs");
       return res.json();
     }
@@ -70,7 +70,7 @@ export function StudentDashboard() {
   const { data: applications = [], refetch: refetchApplications } = useQuery<Application[]>({
     queryKey: ['applications', studentProfile.roll_no],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:8000/api/v1/jobs/applications/${studentProfile.roll_no}`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1"}/jobs/applications/${studentProfile.roll_no}`);
       if (!res.ok) throw new Error("Failed to load applications");
       return res.json();
     }
@@ -78,7 +78,7 @@ export function StudentDashboard() {
 
   const handleApply = async (job: Job) => {
     try {
-      const res = await fetch("http://localhost:8000/api/v1/jobs/apply", {
+      const res = await fetch((import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1") + "/jobs/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

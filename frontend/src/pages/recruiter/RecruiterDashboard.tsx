@@ -60,7 +60,7 @@ export function RecruiterDashboard() {
 
   const fetchJobs = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/v1/jobs");
+      const res = await fetch((import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1") + "/jobs");
       if (res.ok) {
         const data = await res.json();
         setJobs(data);
@@ -74,8 +74,8 @@ export function RecruiterDashboard() {
     setLoading(true);
     try {
       const url = selectedJobId === "all" 
-        ? "http://localhost:8000/api/v1/jobs/candidates/matches"
-        : `http://localhost:8000/api/v1/jobs/candidates/matches?job_id=${selectedJobId}`;
+        ? (import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1") + "/jobs/candidates/matches"
+        : `${import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1"}/jobs/candidates/matches?job_id=${selectedJobId}`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -96,7 +96,7 @@ export function RecruiterDashboard() {
     }
     setSubmittingJob(true);
     try {
-      const res = await fetch("http://localhost:8000/api/v1/jobs", {
+      const res = await fetch((import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1") + "/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

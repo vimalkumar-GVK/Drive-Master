@@ -243,7 +243,7 @@ export default function Approvals() {
                           <div className="flex items-center justify-end gap-2">
                             {req.companyData?.jd_url && (
                               <button
-                                onClick={() => setJdUrl(`http://localhost:8000${req.companyData.jd_url}`)}
+                                onClick={() => setJdUrl(`${window.location.origin === "http://localhost:5173" ? "http://localhost:8000" : ""}${req.companyData.jd_url}`)}
                                 className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors tooltip-trigger"
                                 title="View JD"
                               >

@@ -280,7 +280,7 @@ export function StudentList() {
     setIsUploading(true);
     try {
       const token = localStorage.getItem('token');
-      const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+      const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1') + '';
       const response = await fetch(`${baseURL}/students/admin/students/upload?mode=preview`, {
         method: 'POST',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
@@ -323,7 +323,7 @@ export function StudentList() {
     setIsUploading(true);
     try {
       const token = localStorage.getItem('token');
-      const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+      const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1') + '';
       const response = await fetch(`${baseURL}/students/admin/students/upload?mode=${mode}`, {
         method: 'POST',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},

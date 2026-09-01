@@ -464,7 +464,7 @@ export function TeamManagement() {
     try {
       // Using fetch instead of axios to avoid boundary issues
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:8000/api/v1/companies/upload', {
+      const res = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1') + '/companies/upload', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -723,7 +723,7 @@ export function TeamManagement() {
                     </div>
                   )}
                   {company.jd_url && (
-                    <button onClick={() => { setJdUrl(`http://localhost:8000${company.jd_url}`); setShowJdModal(true); }} className="text-xs text-blue-500 hover:underline flex items-center gap-1 mt-1 bg-transparent border-0 p-0 cursor-pointer">
+                    <button onClick={() => { setJdUrl(`${window.location.origin === "http://localhost:5173" ? "http://localhost:8000" : ""}${company.jd_url}`); setShowJdModal(true); }} className="text-xs text-blue-500 hover:underline flex items-center gap-1 mt-1 bg-transparent border-0 p-0 cursor-pointer">
                       <FileText className="h-3 w-3"/> View JD
                     </button>
                   )}
