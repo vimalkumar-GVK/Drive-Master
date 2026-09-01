@@ -22,6 +22,21 @@ class CompanyBase(BaseModel):
     # Track who added/manages this company
     managed_by: str
 
+    # Verification and Drive Data
+    verification_status: Optional[str] = None # Legacy? We'll keep for backward compat or drop? User said to add `approval_status`.
+    approval_status: Optional[str] = None
+    isActive: bool = False
+    isGloballyApproved: bool = False
+    isVerified: bool = False
+    jd_url: Optional[str] = None
+    ctc_lpa: Optional[float] = None
+    registeredStudentsFile: Optional[str] = None
+    attendedCount: Optional[int] = 0
+    placedCount: Optional[int] = 0
+    registeredStudents: Optional[list[str]] = []
+    attendedStudents: Optional[list[str]] = []
+    placedStudents: Optional[list[str]] = []
+
 class CompanyCreate(CompanyBase):
     pass
 

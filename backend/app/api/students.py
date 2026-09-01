@@ -179,6 +179,29 @@ async def upload_students_excel(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/admin/students/placed")
+async def get_all_placed_students(
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+):
+    db = get_database()
+    # Fetch placed students, sorted by created_at (newest first)
+    cursor = db["placed_students"].find({}).sort("created_at", -1)
+    placed_students = await cursor.to_list(length=10000)
+    
+    # Format the response
+    result = []
+    for s in placed_students:
+        result.append({
+            "id": str(s.get("_id")),
+            "roll_no": s.get("roll_no", "N/A"),
+            "name": s.get("name", "N/A"),
+            "department": s.get("department", "N/A"),
+            "company_name": s.get("company_name", "N/A"),
+            "ctc_lpa": s.get("ctc_lpa", "N/A"),
+            "created_at": s.get("created_at")
+        })
+    return result
+
 @router.get("/admin/students")
 async def get_students_for_admin(
     current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
@@ -186,14 +209,24 @@ async def get_students_for_admin(
     db = get_database()
     cursor = db["students"].find({"is_deleted": {"$ne": True}})
     students = await cursor.to_list(length=10000)
-    # Fetch placed students to determine status
-    placed_cursor = db["placed_students"].find({})
-    placed_docs = await placed_cursor.to_list(length=10000)
-    placed_roll_nos = {doc.get("roll_no") for doc in placed_docs if doc.get("roll_no")}
+    # Fetch placed students to determine status from active companies
+    company_cursor = db["companies"].find({"isActive": True})
+    active_companies = await company_cursor.to_list(length=1000)
+    
+    placed_info = {}
+    for c in active_companies:
+        for r in c.get("placedStudents", []):
+            if r:
+                r_clean = str(r).strip().upper()
+                placed_info[r_clean] = {
+                    "company_name": c.get("name", "N/A"),
+                    "ctc_lpa": c.get("ctc_lpa", "N/A")
+                }
 
     # Return formatted list matching the frontend UI requirements
     result = []
     for s in students:
+        roll_clean = str(s.get("roll_no", "")).strip().upper()
         result.append({
             "id": str(s.get("_id")),
             "roll_no": s.get("roll_no", "N/A"),
@@ -211,7 +244,9 @@ async def get_students_for_admin(
             "video_url": s.get("video_url"),
             "photo_url": s.get("photo_url"),
             "portfolio_url": s.get("portfolio_url"),
-            "placement_status": "Placed" if s.get("roll_no") in placed_roll_nos else "YTBP"
+            "placement_status": "Placed" if roll_clean in placed_info else "YTBP",
+            "placed_company": placed_info[roll_clean]["company_name"] if roll_clean in placed_info else None,
+            "placed_ctc": placed_info[roll_clean]["ctc_lpa"] if roll_clean in placed_info else None
         })
     return result
 
@@ -238,12 +273,14 @@ async def get_trashed_students_for_admin(
             "grad_year": s.get("grad_year", "N/A"),
             "email": s.get("email", "N/A"),
             "phone": s.get("phone", "N/A"),
+            "delete_reason": s.get("delete_reason", "N/A"),
         })
     return result
 
 @router.delete("/admin/students/{student_id}")
 async def delete_student(
     student_id: str,
+    reason: str = None,
     current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER]))
 ):
     db = get_database()
@@ -252,9 +289,13 @@ async def delete_student(
         raise HTTPException(status_code=404, detail="Student not found")
         
     try:
+        update_data = {"is_deleted": True}
+        if reason:
+            update_data["delete_reason"] = reason
+
         result = await db["students"].update_one(
             {"_id": ObjectId(student_id)},
-            {"$set": {"is_deleted": True}}
+            {"$set": update_data}
         )
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid student ID")
@@ -285,7 +326,7 @@ async def restore_student(
     try:
         result = await db["students"].update_one(
             {"_id": ObjectId(student_id)},
-            {"$set": {"is_deleted": False}}
+            {"$set": {"is_deleted": False}, "$unset": {"delete_reason": ""}}
         )
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid student ID")

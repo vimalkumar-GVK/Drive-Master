@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
@@ -41,7 +41,18 @@ async def get_companies(
     current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD, RoleEnum.RECRUITER]))
 ):
     db = get_database()
-    cursor = db["companies"].find({})
+    
+    query = {}
+    if current_user.role == RoleEnum.PLACEMENT_LEAD:
+        query = {
+            "$or": [
+                {"isActive": True},
+                {"createdByEmail": current_user.email},
+                {"created_by.email": current_user.email} # keep for backward compatibility
+            ]
+        }
+    
+    cursor = db["companies"].find(query)
     companies = await cursor.to_list(length=100)
     
     result = []
@@ -59,17 +70,47 @@ async def create_company(
 ):
     db = get_database()
     comp_dict = company.model_dump()
-    comp_dict["created_at"] = datetime.utcnow().isoformat()
-    comp_dict["created_by"] = {
-        "name": current_user.name,
-        "role": current_user.role,
-        "email": current_user.email
-    }
+    comp_dict["created_at"] = datetime.utcnow()
+    comp_dict["updated_at"] = datetime.utcnow()
+    comp_dict["createdBy"] = str(current_user.id)
+    comp_dict["createdByName"] = current_user.name or current_user.email
+    comp_dict["createdByRole"] = current_user.role.upper() if current_user.role else ""
+    comp_dict["createdByEmail"] = current_user.email
     comp_dict["selected_count"] = 0
+    
+    # Implementation of COMPANY_CREATION unified approval
+    if current_user.role == RoleEnum.ADMIN:
+        comp_dict["isActive"] = True
+        comp_dict["isGloballyApproved"] = True
+        comp_dict["approval_status"] = "APPROVED_GLOBALLY"
+    elif current_user.role == RoleEnum.MANAGER:
+        comp_dict["isActive"] = False
+        comp_dict["isGloballyApproved"] = False
+        comp_dict["approval_status"] = "PENDING_ADMIN"
+    else:
+        comp_dict["isActive"] = False
+        comp_dict["isGloballyApproved"] = False
+        comp_dict["approval_status"] = "PENDING_MANAGER"
     
     res = await db["companies"].insert_one(comp_dict)
     comp_dict["id"] = str(res.inserted_id)
     del comp_dict["_id"]
+    
+    from app.models.approval import ApprovalStatus, RequestTypeEnum
+    
+    # Only create an approval doc if not auto-approved
+    if comp_dict["approval_status"] != "APPROVED_GLOBALLY":
+        approval_doc = {
+            "type": RequestTypeEnum.COMPANY_CREATION.value,
+            "companyId": comp_dict["id"],
+            "companyData": comp_dict,
+            "requestedBy": str(current_user.id),
+            "requestedByName": comp_dict["createdByName"],
+            "requestedByRole": comp_dict["createdByRole"],
+            "status": comp_dict["approval_status"],
+            "createdAt": datetime.utcnow()
+        }
+        await db.approvals.insert_one(approval_doc)
     
     await log_action(
         user_id=current_user.email,
@@ -80,7 +121,7 @@ async def create_company(
         new_data=comp_dict
     )
     
-    return {"message": "Company added successfully", "company": comp_dict}
+    return {"message": "Company added successfully and is pending approval", "company": comp_dict}
 
 @router.post("/upload")
 async def upload_companies(
@@ -130,18 +171,40 @@ async def upload_companies(
                 "map_url": get_val(row, ['map', 'map url', 'map link', 'google map']),
                 "ctc_lpa": get_val(row, ['ctc', 'ctc lpa', 'ctc (lpa)', 'salary', 'package']),
                 "created_at": datetime.utcnow().isoformat(),
-                "created_by": {
-                    "name": current_user.name,
-                    "role": current_user.role,
-                    "email": current_user.email
-                },
-                "selected_count": 0
+                "createdBy": str(current_user.id),
+                "createdByName": current_user.name or current_user.email,
+                "createdByRole": current_user.role.upper() if current_user.role else "",
+                "createdByEmail": current_user.email,
+                "selected_count": 0,
+                "isActive": current_user.role == RoleEnum.ADMIN,
+                "isGloballyApproved": current_user.role == RoleEnum.ADMIN,
+                "approval_status": "APPROVED_GLOBALLY" if current_user.role == RoleEnum.ADMIN else ("PENDING_ADMIN" if current_user.role == RoleEnum.MANAGER else "PENDING_MANAGER")
             })
             
         if not companies_to_insert:
             return {"message": "No valid companies found in the file. Ensure you have 'Company Name' column."}
             
-        await db["companies"].insert_many(companies_to_insert)
+        res = await db["companies"].insert_many(companies_to_insert)
+        
+        # Insert approvals for non-admin uploads
+        if current_user.role != RoleEnum.ADMIN:
+            from app.models.approval import RequestTypeEnum
+            approvals_to_insert = []
+            for i, comp in enumerate(companies_to_insert):
+                # The inserted IDs are in res.inserted_ids
+                comp_id = str(res.inserted_ids[i])
+                approvals_to_insert.append({
+                    "type": RequestTypeEnum.COMPANY_CREATION.value,
+                    "companyId": comp_id,
+                    "companyData": comp,
+                    "requestedBy": str(current_user.id),
+                    "requestedByName": comp["createdByName"],
+                    "requestedByRole": comp["createdByRole"],
+                    "status": comp["approval_status"],
+                    "createdAt": datetime.utcnow()
+                })
+            if approvals_to_insert:
+                await db.approvals.insert_many(approvals_to_insert)
         
         return {"message": f"Successfully processed {len(companies_to_insert)} companies."}
         
@@ -471,7 +534,8 @@ async def upload_placed_students(
                 "name": get_val(row, ['name', 'student name']),
                 "department": get_val(row, ['department', 'dept', 'branch']),
                 "company_name": get_val(row, ['company', 'company name']),
-                "ctc_lpa": get_val(row, ['ctc(in lpa)', 'ctc', 'ctc (lpa)', 'package'])
+                "ctc_lpa": get_val(row, ['ctc(in lpa)', 'ctc', 'ctc (lpa)', 'package']),
+                "created_at": datetime.utcnow().isoformat()
             })
             
         if not placed_students:
@@ -534,7 +598,8 @@ async def add_manual_placed_students(
             "name": student_doc.get("name", "") if student_doc else "",
             "department": student_doc.get("department", "") if student_doc else "",
             "company_name": company_name,
-            "ctc_lpa": ctc_lpa
+            "ctc_lpa": ctc_lpa,
+            "created_at": datetime.utcnow().isoformat()
         })
         
     if not placed_students:
@@ -746,10 +811,23 @@ async def upload_registered_students(
         if updates:
             await db["company_registered_students"].bulk_write(updates)
             
+        # Clean roll numbers for company model
+        unique_registered = list(set([str(r).strip().upper() for r in roll_numbers if str(r).strip() != ""]))
+        
+        # Save to company document
+        from bson import ObjectId
+        await db["companies"].update_one(
+            {"_id": ObjectId(company_id)},
+            {"$set": {
+                "registeredStudents": unique_registered,
+                "registered_count": len(unique_registered)
+            }}
+        )
+            
         # Queue the background task to calculate ATS scores
         background_tasks.add_task(process_ats_background, company_id, roll_numbers)
             
-        return {"message": f"Successfully uploaded {len(roll_numbers)} registered students. ATS Analysis started in background."}
+        return {"message": f"Successfully uploaded {len(unique_registered)} registered students. ATS Analysis started in background."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
@@ -784,6 +862,24 @@ async def add_manual_registered_students(
             )
         if updates:
             await db["company_registered_students"].bulk_write(updates)
+            
+        # Clean roll numbers for company model
+        unique_registered = list(set([str(r).strip().upper() for r in roll_numbers if str(r).strip() != ""]))
+        
+        # Save to company document (Fetch first to append, or maybe manual should append? Wait, manual usually appends. Let's fetch and union)
+        from bson import ObjectId
+        company = await db["companies"].find_one({"_id": ObjectId(company_id)})
+        if company:
+            existing = set(company.get("registeredStudents", []))
+            existing.update(unique_registered)
+            new_registered = list(existing)
+            await db["companies"].update_one(
+                {"_id": ObjectId(company_id)},
+                {"$set": {
+                    "registeredStudents": new_registered,
+                    "registered_count": len(new_registered)
+                }}
+            )
             
         # Queue the background task to calculate ATS scores
         background_tasks.add_task(process_ats_background, company_id, roll_numbers)
@@ -917,3 +1013,106 @@ async def mark_bulk_attended_upload(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+
+@router.post("/{company_id}/upload-drive-data")
+async def upload_drive_data(
+    company_id: str,
+    type: str, # "attended" or "placed"
+    file: Optional[UploadFile] = File(None),
+    manual_data: Optional[str] = Form(None),
+    ctc: Optional[str] = Form(None),
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+):
+    try:
+        raw_list = []
+        if file:
+            if not file.filename.endswith(('.xlsx', '.csv', '.xls')):
+                raise HTTPException(status_code=400, detail="Invalid file format. Please upload .xlsx, .xls or .csv")
+            
+            content = await file.read()
+            if file.filename.endswith('.csv'):
+                df = pd.read_csv(io.BytesIO(content))
+            else:
+                df = pd.read_excel(io.BytesIO(content), engine='openpyxl')
+                
+            # Find roll_no column case-insensitive
+            # If roll_no not found, fallback to "email" column
+            col = None
+            for c in df.columns:
+                c_str = str(c).lower()
+                if 'roll' in c_str or 'reg' in c_str:
+                    col = c
+                    break
+            
+            if not col:
+                for c in df.columns:
+                    if 'email' in str(c).lower():
+                        col = c
+                        break
+                        
+            if not col:
+                col = df.columns[0] # Fallback to first column as a last resort
+                
+            # Extract and fallback email to username
+            for val in df[col].dropna().astype(str).tolist():
+                if '@' in val:
+                    val = val.split('@')[0]
+                raw_list.append(val)
+                
+        elif manual_data:
+            raw_list = manual_data.split(',')
+        else:
+            raise HTTPException(status_code=400, detail="Either file or manual_data must be provided.")
+            
+        # Clean data: strip spaces, uppercase, remove empty, and distinct
+        unique_students = list(set([str(s).strip().upper() for s in raw_list if str(s).strip() != ""]))
+        
+        db = get_database()
+        
+        update_field = "attendedStudents" if type == "attended" else "placedStudents"
+        count_field = "attendedCount" if type == "attended" else "placedCount"
+        
+        update_doc = {
+            update_field: unique_students,
+            count_field: len(unique_students)
+        }
+        
+        if type == 'placed' and ctc:
+            update_doc['ctc_lpa'] = float(ctc) if ctc.replace('.','',1).isdigit() else None
+            
+        await db["companies"].update_one(
+            {"_id": ObjectId(company_id)},
+            {"$set": update_doc}
+        )
+        
+        return {"message": f"Successfully uploaded {len(unique_students)} {type} students.", "count": len(unique_students), "students": unique_students}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process data: {str(e)}")
+
+@router.post("/compare-drive-data/{company_id}")
+async def compare_drive_data(
+    company_id: str,
+    current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))
+):
+    db = get_database()
+    company = await db["companies"].find_one({"_id": ObjectId(company_id)})
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+        
+    registered = company.get("registeredStudents", [])
+    attended = company.get("attendedStudents", [])
+    placed = company.get("placedStudents", [])
+    
+    # Calculate differences
+    not_attended = [s for s in registered if s not in attended]
+    attended_not_placed = [s for s in attended if s not in placed]
+    
+    return {
+        "registered": len(registered),
+        "attended": len(attended),
+        "placed": len(placed),
+        "notAttended": len(not_attended),
+        "attendedButNotPlaced": len(attended_not_placed),
+        "notAttendedList": not_attended,
+        "attendedButNotPlacedList": attended_not_placed
+    }

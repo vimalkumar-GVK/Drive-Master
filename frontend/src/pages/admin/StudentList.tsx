@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
 import api from "../../lib/api";
 import { X, Play, FileText, LayoutTemplate, Plus, Upload, Loader2, Sparkles, Users, Edit2, Trash2, RotateCcw, AlertTriangle, ArrowLeft } from "lucide-react";
+import { TrashReasonModal } from "../../components/TrashReasonModal";
 
 interface Student {
   id: string;
@@ -23,6 +24,9 @@ interface Student {
   github_url?: string;
   linkedin_url?: string;
   placement_status?: string;
+  placed_company?: string;
+  placed_ctc?: string;
+  delete_reason?: string;
 }
 
 interface AtsAnalysis {
@@ -103,6 +107,9 @@ export function StudentList() {
   const [uploadStats, setUploadStats] = useState({ newCount: 0, existingCount: 0, totalCount: 0 });
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
 
+  const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
+  const [studentToTrash, setStudentToTrash] = useState<Student | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { role } = useOutletContext<{ role: string }>();
@@ -146,20 +153,28 @@ export function StudentList() {
   });
 
   const fetchStudents = () => {
-    api.get("/students/admin/students")
+    const t = new Date().getTime();
+    api.get(`/students/admin/students?t=${t}`)
       .then(res => setStudents(res.data))
       .catch(err => console.error("Error fetching students:", err));
       
-    api.get("/students/admin/students/trash")
+    api.get(`/students/admin/students/trash?t=${t}`)
       .then(res => setTrashedStudents(res.data))
       .catch(err => console.error("Error fetching trashed students:", err));
   };
 
-  const handleDelete = async (studentId: string) => {
-    if (!window.confirm("Are you sure you want to move this student to trash?")) return;
+  const handleDeleteClick = (student: Student) => {
+    setStudentToTrash(student);
+    setIsTrashModalOpen(true);
+  };
+
+  const handleConfirmTrash = async (reason: string) => {
+    if (!studentToTrash) return;
     try {
-      await api.delete(`/students/admin/students/${studentId}`);
+      await api.delete(`/students/admin/students/${studentToTrash.id}?reason=${encodeURIComponent(reason)}`);
       setSelectedStudent(null);
+      setIsTrashModalOpen(false);
+      setStudentToTrash(null);
       fetchStudents();
     } catch (err) {
       console.error(err);
@@ -501,13 +516,20 @@ export function StudentList() {
                     <td className="px-6 py-4 text-slate-600">{student.ug}</td>
                     <td className="px-6 py-4 font-bold text-slate-700">{student.grad_year}</td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-md text-xs font-bold ${
-                        student.placement_status === 'Placed' 
-                          ? 'bg-emerald-100 text-emerald-700' 
-                          : 'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {student.placement_status || 'YTBP'}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className={`px-2 py-1 rounded-md text-xs font-bold ${
+                          student.placement_status === 'Placed' 
+                            ? 'bg-emerald-100 text-emerald-700' 
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {student.placement_status || 'YTBP'}
+                        </span>
+                        {student.placement_status === 'Placed' && student.placed_company && (
+                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]" title={`${student.placed_company} ${student.placed_ctc ? `(${student.placed_ctc} LPA)` : ''}`}>
+                            {student.placed_company} {student.placed_ctc && `(${student.placed_ctc} LPA)`}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-slate-500 font-medium">{student.email}</td>
                     <td className="px-6 py-4 text-slate-500 font-medium">{student.phone}</td>
@@ -552,7 +574,7 @@ export function StudentList() {
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDelete(student.id);
+                                handleDeleteClick(student);
                               }}
                               className="p-1.5 hover:bg-red-100 text-red-600 rounded-md transition-colors" 
                               title="Move to Trash"
@@ -597,6 +619,7 @@ export function StudentList() {
                   <th className="px-6 py-4">NAME</th>
                   <th className="px-6 py-4">DEPT.</th>
                   <th className="px-6 py-4">EMAIL</th>
+                  <th className="px-6 py-4">REASON</th>
                   <th className="px-6 py-4 text-right">ACTIONS</th>
                 </tr>
               </thead>
@@ -607,6 +630,7 @@ export function StudentList() {
                     <td className="px-6 py-4 font-bold text-slate-800">{student.name}</td>
                     <td className="px-6 py-4 text-slate-600 font-medium">{student.department}</td>
                     <td className="px-6 py-4 text-slate-500 font-medium">{student.email}</td>
+                    <td className="px-6 py-4 text-slate-600 font-medium">{student.delete_reason || 'No reason provided'}</td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {canEdit && (
@@ -898,7 +922,7 @@ export function StudentList() {
                 <Edit2 className="h-4 w-4" />
               </button>
               <button 
-                onClick={() => handleDelete(selectedStudent.id)}
+                onClick={() => handleDeleteClick(selectedStudent)}
                 className="p-1.5 hover:bg-red-100 text-red-600 rounded-md transition-colors" 
                 title="Move to Trash"
               >
@@ -1249,6 +1273,24 @@ export function StudentList() {
         </div>
       )}
 
+      {/* File Upload Hidden Input */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleExcelUpload} 
+        accept=".xlsx,.xls,.csv" 
+        className="hidden" 
+      />
+
+      <TrashReasonModal 
+        isOpen={isTrashModalOpen}
+        onClose={() => {
+          setIsTrashModalOpen(false);
+          setStudentToTrash(null);
+        }}
+        onConfirm={handleConfirmTrash}
+        student={studentToTrash}
+      />
     </div>
   );
 }

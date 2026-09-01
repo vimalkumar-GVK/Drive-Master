@@ -12,6 +12,7 @@ interface MetricsData {
     not_placed: number;
     avg_ctc: number;
     pending_interviews: number;
+    pending_this_week?: number;
   };
   students_list: {
     roll_no: string;
@@ -47,10 +48,12 @@ const getDepartmentColor = (dept: string) => {
   return 'bg-slate-100 text-slate-600';
 };
 
-const getStatusColor = (status: string) => {
-  if (status.toLowerCase() === 'placed') return 'bg-emerald-500 text-white';
-  if (status.toLowerCase() === 'scheduled') return 'bg-amber-500 text-white';
-  return 'bg-slate-300 text-white';
+const getStatusBadge = (status: string) => {
+  if (status === 'Placed') {
+    return <span className="bg-emerald-500 text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max">Placed <span className="w-1.5 h-1.5 bg-white rounded-full ml-1"></span></span>
+  } else {
+    return <span className="bg-amber-400 text-black px-3 py-1 rounded-full text-xs font-semibold flex w-max">YTBP</span>
+  }
 };
 
 const getRoleBadge = (role: string) => {
@@ -70,6 +73,20 @@ export function AdminDashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
+  const [members, setMembers] = useState<any[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+
+  const fetchMembers = async () => {
+    try {
+      const res = await api.get("/team/members");
+      setMembers(res.data.members || []);
+    } catch (err) {
+      console.error("Failed to fetch team members", err);
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
   const fetchMetrics = async () => {
     try {
       const response = await api.get("/dashboard/admin/metrics");
@@ -87,6 +104,7 @@ export function AdminDashboard() {
 
   useEffect(() => {
     fetchMetrics();
+    fetchMembers();
   }, []);
 
   // Member management moved to TeamManagement.tsx
@@ -178,7 +196,7 @@ export function AdminDashboard() {
           <div>
             <p className="text-sm font-semibold text-slate-500">Pending Interviews</p>
             <h3 className="text-3xl font-bold text-slate-800 mt-1">{data.student_info.pending_interviews}</h3>
-            <p className="text-xs font-medium text-blue-500 mt-1">8 scheduled this week</p>
+            <p className="text-xs font-medium text-blue-500 mt-1">{data.student_info.pending_this_week || 0} scheduled this week</p>
           </div>
         </div>
       </div>
@@ -235,10 +253,7 @@ export function AdminDashboard() {
                       <td className="py-3 px-2 text-slate-500">{student.email}</td>
                       <td className="py-3 px-2 text-slate-500">{student.phone}</td>
                       <td className="py-3 px-2">
-                        <span className={`px-2.5 py-1 text-xs font-bold rounded-full flex items-center gap-1 w-max ${getStatusColor(student.status)}`}>
-                          {student.status}
-                          {student.status.toLowerCase() === 'placed' && <span className="w-1.5 h-1.5 rounded-full bg-white ml-1"></span>}
-                        </span>
+                        {getStatusBadge(student.status)}
                       </td>
                     </tr>
                   ))}
@@ -290,34 +305,52 @@ export function AdminDashboard() {
               <div className="flex-1 flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-800">Placement Team Members</h2>
-                  <p className="text-xs text-slate-500">{data.team_members.length} active members</p>
+                  <p className="text-xs text-slate-500">{members.length} active members</p>
                 </div>
               </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[300px] overflow-y-auto pr-2">
-              {data.team_members.map((member, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-colors">
-                  <div className="flex items-center gap-3 relative">
-                    <div className="relative">
-                      <img src={member.avatar} alt={member.name} className="w-10 h-10 rounded-full bg-slate-100" />
-                      <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" title="Online"></div>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800">{member.name}</h4>
-                      <p className="text-xs text-slate-500">
-                        {member.role === 'placement_lead' ? 'Placement Lead' : 
-                         member.role === 'admin' ? 'Admin' : member.role}
-                      </p>
+              {loadingMembers ? (
+                Array.from({ length: 4 }).map((_, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3 animate-pulse">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-slate-200" />
+                      <div className="space-y-2">
+                        <div className="h-4 w-24 bg-slate-200 rounded" />
+                        <div className="h-3 w-32 bg-slate-200 rounded" />
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-3 py-1 text-[11px] font-bold rounded-full ${getRoleBadge(member.role)}`}>
-                      {member.role.split(' ')[0]}
-                    </span>
+                ))
+              ) : (
+                members.map((member, idx) => (
+                  <div key={idx} className={`flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 border transition-colors ${member.isYou ? 'border-blue-200 bg-blue-50/30' : 'border-transparent hover:border-slate-100'}`}>
+                    <div className="flex items-center gap-3 relative">
+                      <div className="relative">
+                        <div className="w-10 h-10 rounded-full bg-indigo-500 text-white flex items-center justify-center font-bold text-sm">
+                          {member.avatar_initials}
+                        </div>
+                        {member.isOnline && (
+                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" title="Online"></div>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                          {member.name} 
+                          {member.isYou && <span className="bg-blue-100 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full">You</span>}
+                        </p>
+                        <p className="text-xs text-slate-500">{member.username} • {member.role === 'placement_lead' ? 'Placement Lead' : member.role === 'admin' ? 'Admin' : member.role.charAt(0).toUpperCase() + member.role.slice(1)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-3 py-1 text-[11px] font-bold rounded-full ${getRoleBadge(member.role)} capitalize`}>
+                        {member.role.replace('_', ' ')}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

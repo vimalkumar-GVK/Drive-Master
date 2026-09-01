@@ -28,9 +28,17 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)) -> Use
             email = payload.get("sub")
             
         if email is None:
-            return UserInDB(_id="dev_admin", email="admin@gmail.com", name="Admin User", role=RoleEnum.ADMIN, hashed_password="dummy")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     except JWTError:
-        return UserInDB(_id="dev_admin", email="admin@gmail.com", name="Admin User", role=RoleEnum.ADMIN, hashed_password="dummy")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
         
     db = get_database()
     user = await db["users"].find_one({"email": email})
@@ -46,9 +54,20 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)) -> Use
     if "hashed_password" not in user:
         user["hashed_password"] = "dummy"
     
-    # Handle roles that are not in RoleEnum (like "Member" or "admin")
-    if user.get("role") not in [e.value for e in RoleEnum]:
-        # Just map it to a valid enum for the backend session
+    # Handle roles that are not strictly matching RoleEnum (e.g. "Manager" or "Placement Lead")
+    user_role_str = user.get("role", "")
+    if isinstance(user_role_str, str):
+        normalized = user_role_str.strip().upper().replace(" ", "_")
+        
+        # Explicitly map legacy/custom strings to correct enums
+        if normalized == "MEMBER":
+            normalized = "PLACEMENT_LEAD"
+            
+        if normalized in [e.value for e in RoleEnum]:
+            user["role"] = RoleEnum(normalized)
+        else:
+            user["role"] = RoleEnum.ADMIN
+    else:
         user["role"] = RoleEnum.ADMIN
         
     return UserInDB(**user)

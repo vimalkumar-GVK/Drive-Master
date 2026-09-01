@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import api from "../../lib/api";
-import { Download, X, Search, Filter, Plus, Eye, Edit2, Building2, Flame, CheckCircle, GraduationCap, Users, Trash2, Upload, MapPin } from "lucide-react";
+import { Download, X, Search, Filter, Eye, Edit2, Building2, Flame, CheckCircle, GraduationCap, Users, MapPin } from "lucide-react";
 
 interface KanbanCard {
   id: string;
@@ -120,10 +120,7 @@ export function RecruiterPipeline() {
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapAddress, setMapAddress] = useState("");
 
-  const { role } = useOutletContext<{ role: string }>();
-  const canEdit = role === "admin" || role === "manager";
-
-  const [isUploading, setIsUploading] = useState(false);
+  useOutletContext<{ role: string }>();
 
   const fetchWorkflow = () => {
     api.get("/team/workflow")
@@ -158,31 +155,6 @@ export function RecruiterPipeline() {
       .catch(err => console.error("Error fetching registered students:", err));
   };
   
-  const handleUploadRegisteredStudents = (e: React.ChangeEvent<HTMLInputElement>, companyId: string, companyName: string) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setIsUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    
-    api.post(`/companies/${companyId}/registered_students/upload`, formData, {
-      headers: { "Content-Type": "multipart/form-data" }
-    })
-    .then(res => {
-      alert(res.data.message || "Students uploaded successfully!");
-      handleViewRegisteredStudents(companyId, companyName);
-    })
-    .catch(err => {
-      alert(err.response?.data?.detail || "Failed to upload registered students");
-    })
-    .finally(() => {
-      setIsUploading(false);
-      if (e.target) e.target.value = "";
-    });
-  };
-
-
   const handleAddCompanySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     api.post("/companies", newCompany)

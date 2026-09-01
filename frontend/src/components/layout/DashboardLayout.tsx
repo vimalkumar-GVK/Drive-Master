@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "./Sidebar";
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
+import api from "../../lib/api";
 import { Bell, User, Menu } from "lucide-react";
 import { UndoRedoControls } from "./UndoRedoControls";
 
@@ -20,6 +21,21 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (role === "admin" || role === "manager") {
+      const fetchCount = () => {
+        api.get("/approvals/pending-count")
+          .then(res => setPendingApprovals(res.data.count))
+          .catch(err => console.error("Failed to fetch pending approvals count", err));
+      };
+      fetchCount();
+      const interval = setInterval(fetchCount, 30000); // Poll every 30s
+      return () => clearInterval(interval);
+    }
+  }, [role]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans selection:bg-indigo-500/30">
@@ -55,10 +71,19 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
                 className={`relative text-slate-400 hover:${colors.text} transition-colors p-2 rounded-full hover:${colors.bg}`}
               >
                 <Bell className="h-5 w-5" />
-                <span className="absolute top-0 right-0 -mt-1 -mr-1 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                </span>
+                {pendingApprovals > 0 ? (
+                  <span className="absolute top-0 right-0 -mt-1 -mr-1 flex h-4 w-4">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 items-center justify-center text-white text-[10px] font-bold">
+                      {pendingApprovals}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="absolute top-0 right-0 -mt-1 -mr-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-slate-500"></span>
+                  </span>
+                )}
               </button>
               
               {isNotificationsOpen && (
@@ -67,44 +92,35 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
                   <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-4 duration-200">
                     <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                       <h3 className="font-bold text-slate-800">Notifications</h3>
-                      <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full">3 New</span>
+                      <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full">
+                        {pendingApprovals > 0 ? `${pendingApprovals} Pending` : 'Up to date'}
+                      </span>
                     </div>
                     <div className="max-h-[320px] overflow-y-auto">
-                      <div className="p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3">
-                        <div className="h-8 w-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                          <User className="h-4 w-4" />
+                      {pendingApprovals > 0 ? (
+                        <div 
+                          onClick={() => {
+                            if (role === "admin" || role === "manager") {
+                              navigate(`/${role}/approvals`);
+                              setIsNotificationsOpen(false);
+                            }
+                          }}
+                          className="p-4 border-b border-slate-50 bg-amber-50/50 hover:bg-amber-50 transition-colors cursor-pointer flex gap-3"
+                        >
+                          <div className="h-8 w-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                            <Bell className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-800">Pending Approvals</p>
+                            <p className="text-xs text-slate-500 mt-0.5">You have {pendingApprovals} requests waiting for your approval.</p>
+                            <span className="text-[10px] text-amber-500 mt-1 block font-medium">Action Required</span>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-slate-800">New Student Registered</p>
-                          <p className="text-xs text-slate-500 mt-0.5">Rahul from B.Tech has registered for Google Drive.</p>
-                          <span className="text-[10px] text-slate-400 mt-1 block">5 minutes ago</span>
+                      ) : (
+                        <div className="p-8 text-center text-slate-500 text-sm">
+                          No new notifications
                         </div>
-                      </div>
-                      <div className="p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3">
-                        <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
-                          <Bell className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-slate-800">System Update</p>
-                          <p className="text-xs text-slate-500 mt-0.5">The platform has been updated with new ATS features.</p>
-                          <span className="text-[10px] text-slate-400 mt-1 block">2 hours ago</span>
-                        </div>
-                      </div>
-                      <div className="p-4 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3">
-                        <div className="h-8 w-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
-                          <User className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-slate-800">Manager Added</p>
-                          <p className="text-xs text-slate-500 mt-0.5">A new placement manager was added to your team.</p>
-                          <span className="text-[10px] text-slate-400 mt-1 block">1 day ago</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-3 border-t border-slate-100 bg-slate-50/50 text-center">
-                      <button className="text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors">
-                        Mark all as read
-                      </button>
+                      )}
                     </div>
                   </div>
                 </>

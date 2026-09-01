@@ -22,21 +22,70 @@ class AddMemberRequest(BaseModel):
 @router.get("/members")
 async def get_team_members(current_user: UserInDB = Depends(require_role([RoleEnum.ADMIN, RoleEnum.MANAGER, RoleEnum.PLACEMENT_LEAD]))):
     db = get_database()
-    users = await db["users"].find({
-        "role": {"$nin": ["student", "Student"]},
-        "email": {"$ne": current_user.email}
-    }).to_list(length=100)
+    current_user_doc = await db["users"].find_one({"_id": ObjectId(current_user.id)})
+    if not current_user_doc:
+        return {"members": []}
+        
+    query = {}
     
-    return {
-        "members": [
-            {
-                "name": u.get("full_name", u.get("name", "Unknown")),
-                "email": u.get("email", ""),
-                "role": u.get("role", ""),
-                "avatar": u.get("avatar_url", "https://api.dicebear.com/7.x/initials/svg?seed=" + u.get("full_name", u.get("name", "U")))
-            } for u in users
-        ]
-    }
+    if current_user.role == RoleEnum.PLACEMENT_LEAD:
+        admin_id = current_user_doc.get("createdBy") or current_user_doc.get("college_id")
+        if admin_id:
+            query = {"$or": [
+                {"college_id": admin_id}, 
+                {"createdBy": admin_id}, 
+                {"_id": ObjectId(admin_id) if isinstance(admin_id, str) and len(admin_id)==24 else admin_id}
+            ]}
+    elif current_user.role == RoleEnum.ADMIN:
+        current_id_str = str(current_user.id)
+        query = {"$or": [
+            {"college_id": current_id_str}, 
+            {"createdBy": current_id_str}, 
+            {"_id": ObjectId(current_user.id)}
+        ]}
+    elif current_user.role == RoleEnum.MANAGER:
+        college_id = current_user_doc.get("college_id")
+        if college_id:
+            query = {"college_id": college_id}
+        
+    if not query:
+        query = {"role": {"$nin": ["student", "Student"]}}
+        
+    users = await db["users"].find(query).to_list(length=100)
+    
+    result = []
+    for u in users:
+        role = u.get("role", "").lower()
+        if role == "student":
+            continue
+            
+        full_name = u.get("full_name") or u.get("name") or "Unknown"
+        avatar_initials = "".join([part[0] for part in full_name.split() if part])[:2].upper()
+        if not avatar_initials:
+            avatar_initials = "U"
+            
+        is_you = str(u.get("_id")) == str(current_user.id)
+        
+        result.append({
+            "_id": str(u.get("_id")),
+            "name": full_name,
+            "username": u.get("username") or u.get("email") or "",
+            "role": u.get("role", ""),
+            "avatar_initials": avatar_initials,
+            "isYou": is_you,
+            "isOnline": True
+        })
+        
+    role_order = {"admin": 1, "manager": 2, "placement_lead": 3}
+    
+    def get_sort_key(member):
+        is_you_score = 0 if member["isYou"] else 1
+        role_score = role_order.get(member["role"].lower(), 99)
+        return (is_you_score, role_score, member["name"])
+        
+    result.sort(key=get_sort_key)
+    
+    return {"members": result}
 
 @router.post("/members")
 async def add_team_member(
@@ -50,6 +99,8 @@ async def add_team_member(
     if existing:
         return {"message": "User already exists", "user": {"email": req.email}}
 
+    current_user_doc = await db["users"].find_one({"_id": ObjectId(current_user.id)})
+    
     new_user = {
         "email": req.email,
         "name": req.full_name,
@@ -57,7 +108,9 @@ async def add_team_member(
         "role": req.role,
         "access_levels": req.access_levels,
         "hashed_password": get_password_hash(req.password),
-        "created_at": datetime.utcnow()
+        "created_at": datetime.utcnow(),
+        "createdBy": str(current_user.id),
+        "college_id": current_user_doc.get("college_id") if current_user_doc else None
     }
     inserted_id = await db["users"].insert_one(new_user)
     

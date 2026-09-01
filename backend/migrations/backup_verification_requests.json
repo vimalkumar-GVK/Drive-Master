@@ -1,0 +1,57 @@
+[
+  {
+    "_id": {
+      "$oid": "6a95c5157175add3a8cbb1a9"
+    },
+    "companyId": "6a9468fa99e2a92ba6a806f6",
+    "requestedBy": null,
+    "requestType": "DRIVE_COMPLETED_VERIFICATION",
+    "payload": {
+      "jd_url": null,
+      "ctc_lpa": 15.0,
+      "registeredFileUrl": null,
+      "attendedData": null,
+      "placedData": [
+        "21IT001",
+        "21IT002"
+      ]
+    },
+    "status": "VERIFIED",
+    "created_at": {
+      "$date": "2026-08-31T18:16:53.938Z"
+    },
+    "updated_at": {
+      "$date": "2026-08-31T18:19:45.706Z"
+    },
+    "managerAction": {
+      "by": "Portal User",
+      "at": {
+        "$date": "2026-08-31T18:19:40.646Z"
+      },
+      "remarks": "Looks good from manager"
+    },
+    "adminAction": {
+      "by": "Portal User",
+      "at": {
+        "$date": "2026-08-31T18:19:45.706Z"
+      },
+      "remarks": "Approved by Admin"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a95c64d85bba368bf8d9ede"
+    },
+    "companyId": "6a9468fa99e2a92ba6a806fb",
+    "requestedBy": null,
+    "requestType": "HOT_VERIFICATION",
+    "payload": null,
+    "status": "PENDING_MANAGER",
+    "created_at": {
+      "$date": "2026-08-31T18:22:05.484Z"
+    },
+    "updated_at": {
+      "$date": "2026-08-31T18:22:05.484Z"
+    }
+  }
+]

@@ -14,6 +14,14 @@ async def connect_to_mongo():
         # Verify connection
         await db.client.admin.command('ping')
         db.db = db.client[settings.MONGO_DB_NAME]
+        
+        # Create unique index to prevent duplicate pending requests
+        await db.db.verification_requests.create_index(
+            [("companyId", 1), ("status", 1)], 
+            partialFilterExpression={"status": {"$in": ["PENDING_MANAGER", "PENDING_ADMIN"]}},
+            unique=True
+        )
+        
         print("Successfully connected to MongoDB!")
     except Exception as e:
         print(f"Failed to connect to MongoDB. Error: {e}")

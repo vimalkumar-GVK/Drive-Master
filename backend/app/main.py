@@ -12,6 +12,7 @@ from app.api.team import router as team_router
 from app.api.jobs import router as jobs_router
 from app.api.companies import router as companies_router
 from app.api.history import router as history_router
+
 import os
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -20,6 +21,9 @@ from pathlib import Path
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_to_mongo()
+    from app.db.mongodb import get_database
+    db = get_database()
+    await db["otps"].create_index("expires_at", expireAfterSeconds=0)
     yield
     await close_mongo_connection()
 
@@ -38,6 +42,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.api.approvals import router as approvals_router
+
 app.include_router(ats_router, prefix="/api/ats", tags=["ATS"])
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(reports_router, prefix="/api/v1/reports", tags=["Reports"])
@@ -47,6 +53,8 @@ app.include_router(team_router, prefix="/api/v1/team", tags=["Team"])
 app.include_router(jobs_router, prefix="/api/v1/jobs", tags=["Jobs"])
 app.include_router(companies_router, prefix="/api/v1/companies", tags=["Companies"])
 app.include_router(history_router, prefix="/api/v1/history", tags=["History"])
+app.include_router(approvals_router, prefix="/api/v1/approvals", tags=["Approvals"])
+
 
 # Ensure uploads directory exists
 os.makedirs("uploads", exist_ok=True)

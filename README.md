@@ -98,3 +98,10 @@ You will need to configure `.env` files for both the frontend and backend contai
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
 4. Push to the branch (`git push origin feature/AmazingFeature`).
 5. Open a Pull Request.
+
+## Database Migration & Rollback
+If the new unified /approvals flow fails, you can restore the old erification_requests collection from the backup file created during migration:
+``bash
+cd backend/migrations
+mongoimport --uri "" --collection verification_requests --file backup_verification_requests.json --jsonArray
+``

@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { useOutletContext } from "react-router-dom";
-import { Search, Plus, Download, Trash2, ExternalLink, Upload, FileText, Eye, X, MapPin, Edit2, Users } from "lucide-react";
+import { useOutletContext, useNavigate } from "react-router-dom";
+import { Search, Plus, Trash2, ExternalLink, Upload, FileText, Eye, X, MapPin, Edit2, Users } from "lucide-react";
 import api from "../../lib/api";
+import { DriveDataUploadModal } from "../../components/modals/DriveDataUploadModal";
 
 export function TeamManagement() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("ALL");
   const [companies, setCompanies] = useState<any[]>([]);
@@ -20,7 +22,8 @@ export function TeamManagement() {
   });
 
   // File Upload State
-  
+  const [isDriveDataModalOpen, setIsDriveDataModalOpen] = useState(false);
+  const [driveDataModalType, setDriveDataModalType] = useState<'attended'|'placed'>('attended');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newCompany, setNewCompany] = useState({
     name: "", location: "", website: "", contact_person: "", phone: "", email: "", size: "", status: "COLD", address: "", ctc_lpa: ""
@@ -68,6 +71,19 @@ export function TeamManagement() {
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [previewColumns, setPreviewColumns] = useState<string[]>([]);
   const [previewTitle, setPreviewTitle] = useState("");
+
+  const [showCompareModal, setShowCompareModal] = useState(false);
+  const [compareData, setCompareData] = useState<any>(null);
+
+  const fetchCompareData = async (companyId: string) => {
+    try {
+      const res = await api.post(`/companies/compare-drive-data/${companyId}`);
+      setCompareData(res.data);
+      setShowCompareModal(true);
+    } catch (err) {
+      alert("Failed to fetch compare data");
+    }
+  };
   
   const [showEditStudentModal, setShowEditStudentModal] = useState(false);
   const [editStudent, setEditStudent] = useState<any>(null);
@@ -79,6 +95,54 @@ export function TeamManagement() {
   const [jdUrl, setJdUrl] = useState("");
 
   const [stagedStatusChanges, setStagedStatusChanges] = useState<{ [key: string]: string }>({});
+
+  const [verificationModalOpen, setVerificationModalOpen] = useState(false);
+  const [verificationCompany, setVerificationCompany] = useState<any>(null);
+  const [verificationStatus, setVerificationStatus] = useState("");
+  const [verificationRemarks, setVerificationRemarks] = useState("");
+
+  const getVerificationValidation = (company: any, targetStatus: string) => {
+    if (targetStatus === 'HOT') {
+      const isValid = !!company.jd_url && Number(company.ctc_lpa || 0) > 0;
+      return { isValid, message: "Please upload JD and update CTC", inline: "JD and CTC required" };
+    }
+    if (targetStatus === 'REGISTERED') {
+      const isValid = (company.registered_count || 0) > 0 || (company.registeredStudents && company.registeredStudents.length > 0);
+      return { isValid, message: "Upload Registered Student data first", inline: "Registered Data required" };
+    }
+    if (targetStatus === 'DRIVE COMPLETED') {
+      const isValid = ((company.attendedCount || 0) > 0 || (company.attendedStudents && company.attendedStudents.length > 0)) && 
+                      ((company.placedCount || 0) > 0 || (company.placedStudents && company.placedStudents.length > 0));
+      return { isValid, message: "Upload Attended & Placed data to verify", inline: "Attended & Placed Data required" };
+    }
+    return { isValid: true, message: "", inline: "" };
+  };
+
+  const handleVerificationRequest = async () => {
+    if (!verificationCompany) return;
+    const reqType = verificationStatus === 'HOT' ? 'HOT_VERIFICATION' : 
+                    verificationStatus === 'REGISTERED' ? 'REGISTERED_VERIFICATION' : 'DRIVE_COMPLETED_VERIFICATION';
+    
+    try {
+      await api.post("/approvals/request", {
+        companyId: verificationCompany.id,
+        type: reqType,
+        companyData: {}
+      });
+      alert("Verification requested successfully!");
+      setVerificationModalOpen(false);
+      setVerificationCompany(null);
+      setVerificationRemarks("");
+      setStagedStatusChanges(prev => {
+        const next = { ...prev };
+        delete next[verificationCompany.id];
+        return next;
+      });
+      fetchCompanies();
+    } catch (err: any) {
+      alert("Failed to request verification: " + (err.response?.data?.detail || err.message));
+    }
+  };
 
   const fetchCompanies = async () => {
     try {
@@ -470,6 +534,7 @@ export function TeamManagement() {
     if (studentInputRef.current) studentInputRef.current.value = "";
   };
 
+  /* 
   const handleDownloadStudents = async (companyId: string, companyName: string) => {
     try {
       const res = await api.get(`/companies/${companyId}/download_students`, {
@@ -481,12 +546,12 @@ export function TeamManagement() {
       link.setAttribute('download', `placed_students_${companyName.replace(/\s+/g, '_')}.xlsx`);
       document.body.appendChild(link);
       link.click();
-      link.remove();
+      document.body.removeChild(link);
     } catch (error) {
-      console.error("Failed to download students:", error);
-      alert("Failed to download students. Did you upload the data first?");
+      alert("Failed to download student list");
     }
   };
+  */
 
   const getStatusColor = (status: string) => {
     switch(status.toUpperCase()) {
@@ -499,51 +564,15 @@ export function TeamManagement() {
   };
 
   const filteredCompanies = companies.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter === 'ALL' || c.status.toUpperCase() === filter;
+    const cName = c.name || '';
+    const cStatus = c.status || '';
+    const matchesSearch = cName.toLowerCase().includes((search || '').toLowerCase());
+    const matchesFilter = filter === 'ALL' || cStatus.toUpperCase() === filter;
     return matchesSearch && matchesFilter;
   });
 
-  const [activeTab, setActiveTab] = useState<'pipeline' | 'approvals'>('pipeline');
-  const [statusRequests, setStatusRequests] = useState<any[]>([]);
-  const [statusHistory, setStatusHistory] = useState<any[]>([]);
 
-  const fetchStatusRequests = async () => {
-    try {
-      const res = await api.get("/companies/status_requests");
-      setStatusRequests(res.data);
-      const historyRes = await api.get("/companies/status_requests/history");
-      setStatusHistory(historyRes.data);
-    } catch (error) {
-      console.error("Failed to fetch status requests:", error);
-    }
-  };
 
-  useEffect(() => {
-    if (isAdmin) {
-      fetchStatusRequests();
-    }
-  }, [isAdmin]);
-
-  const handleApproveStatus = async (id: string) => {
-    try {
-      await api.post(`/companies/${id}/status/approve`);
-      fetchStatusRequests();
-      fetchCompanies();
-    } catch (err) {
-      alert("Failed to approve status");
-    }
-  };
-
-  const handleRejectStatus = async (id: string) => {
-    try {
-      await api.post(`/companies/${id}/status/reject`);
-      fetchStatusRequests();
-      fetchCompanies();
-    } catch (err) {
-      alert("Failed to reject status");
-    }
-  };
 
   return (
     <div className="space-y-6 relative">
@@ -553,19 +582,18 @@ export function TeamManagement() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold tracking-tight">Placement Team & Industry</h1>
-          {isAdmin && (
+          {(isAdmin || isManager) && (
             <div className="flex bg-slate-100 p-1 rounded-lg">
               <button
-                onClick={() => setActiveTab('pipeline')}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'pipeline' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}
+                className="px-4 py-1.5 text-sm font-medium rounded-md transition-colors bg-white shadow-sm text-slate-900"
               >
                 Pipeline
               </button>
               <button
-                onClick={() => setActiveTab('approvals')}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'approvals' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}
+                onClick={() => navigate(`/${role}/approvals`)}
+                className="px-4 py-1.5 text-sm font-medium rounded-md transition-colors text-slate-600 hover:text-slate-900"
               >
-                Approvals {statusRequests.length > 0 && <span className="ml-1 bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full text-xs">{statusRequests.length}</span>}
+                Approvals
               </button>
             </div>
           )}
@@ -635,93 +663,7 @@ export function TeamManagement() {
         </div>
       </div>
 
-      {activeTab === 'approvals' && isAdmin ? (
-        <div className="rounded-md border bg-card overflow-hidden">
-          <div className="p-4 border-b">
-            <h2 className="text-lg font-semibold">Pending Status Approvals</h2>
-          </div>
-          {statusRequests.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">No pending approvals</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Company</th>
-                    <th className="px-4 py-3 font-medium">Current Status</th>
-                    <th className="px-4 py-3 font-medium">Requested Status</th>
-                    <th className="px-4 py-3 font-medium">Requested By</th>
-                    <th className="px-4 py-3 font-medium text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {statusRequests.map(req => (
-                    <tr key={req.id} className="hover:bg-muted/50">
-                      <td className="px-4 py-3 font-semibold">{req.name}</td>
-                      <td className="px-4 py-3"><span className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${getStatusColor(req.status)}`}>{req.status}</span></td>
-                      <td className="px-4 py-3"><span className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${getStatusColor(req.pending_status)}`}>{req.pending_status}</span></td>
-                      <td className="px-4 py-3 text-slate-600">{req.status_requested_by} ({req.status_requested_role})</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {req.jd_url && (
-                            <button onClick={() => { setJdUrl(`http://localhost:8000${req.jd_url}`); setShowJdModal(true); }} className="text-xs font-medium bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 flex items-center gap-1">
-                              <FileText className="h-3 w-3" /> View JD
-                            </button>
-                          )}
-                          <button onClick={() => handleApproveStatus(req.id)} className="text-xs font-medium bg-green-100 text-green-700 px-3 py-1.5 rounded hover:bg-green-200">Approve</button>
-                          <button onClick={() => handleRejectStatus(req.id)} className="text-xs font-medium bg-red-100 text-red-700 px-3 py-1.5 rounded hover:bg-red-200">Reject</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
 
-          {/* Approval History Section */}
-          <div className="mt-8 border-t border-slate-200">
-            <div className="p-6 border-b border-slate-200">
-              <h2 className="text-lg font-bold text-slate-800">Approval History</h2>
-              <p className="text-sm text-slate-500">Record of previously approved or rejected status requests</p>
-            </div>
-            {statusHistory.length === 0 ? (
-              <div className="p-8 text-center text-slate-500">No approval history found</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b">
-                    <tr>
-                      <th className="px-4 py-3 font-medium">Company</th>
-                      <th className="px-4 py-3 font-medium">Requested Status</th>
-                      <th className="px-4 py-3 font-medium">Requested By</th>
-                      <th className="px-4 py-3 font-medium">Action</th>
-                      <th className="px-4 py-3 font-medium">Resolved By</th>
-                      <th className="px-4 py-3 font-medium">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {statusHistory.map((req, idx) => (
-                      <tr key={idx} className="hover:bg-muted/50">
-                        <td className="px-4 py-3 font-semibold">{req.company_name}</td>
-                        <td className="px-4 py-3"><span className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${getStatusColor(req.requested_status)}`}>{req.requested_status}</span></td>
-                        <td className="px-4 py-3 text-slate-600">{req.requested_by}</td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs font-bold ${req.action === 'APPROVED' ? 'text-green-600' : 'text-red-600'}`}>{req.action}</span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">{req.resolved_by}</td>
-                        <td className="px-4 py-3 text-slate-500 text-xs">
-                          {new Date(req.resolved_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
       <div className="rounded-md border bg-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left whitespace-nowrap">
@@ -738,21 +680,46 @@ export function TeamManagement() {
             </tr>
           </thead>
           <tbody>
-            {filteredCompanies.map((company) => (
+            {filteredCompanies.map((company) => {
+              const isEditableRow = isAdmin || (canEditCompany && company.approval_status === "APPROVED_GLOBALLY");
+              return (
               <tr key={company.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                 <td className="px-4 py-3">
-                  <div className="font-medium text-base flex items-center gap-2">
-                    {company.name}
-                    {company.website && (
-                      <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-primary">
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
+                  <div className="font-medium text-base flex flex-col sm:flex-row sm:items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      {company.name}
+                      {company.website && (
+                        <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-primary">
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                    {company.approval_status && company.approval_status !== "APPROVED_GLOBALLY" && (
+                      <span className="text-[10px] bg-yellow-100 text-yellow-800 border border-yellow-200 px-2 py-0.5 rounded-full font-semibold w-max mt-1 sm:mt-0">
+                        {company.approval_status.replace(/_/g, ' ')}
+                      </span>
                     )}
                   </div>
                   <div className="text-xs text-muted-foreground">{company.size} employees</div>
-                  {company.created_by && (
-                    <div className="text-[10px] text-blue-500 font-medium mt-1">
-                      Added by {company.created_by.name} ({company.created_by.role})
+                  {(company.createdByName || company.requestedByName || company.created_by) && (
+                    <div className="text-[10px] font-medium mt-1">
+                      <span className="text-slate-500">Added by </span>
+                      <span className="text-slate-700">
+                        {company.createdByName || company.requestedByName || company.created_by?.name}
+                      </span>
+                      {(() => {
+                        const role = company.createdByRole || company.requestedByRole || company.created_by?.role;
+                        let colorClass = "text-blue-600";
+                        if (role === 'ADMIN') colorClass = "text-red-600";
+                        if (role === 'MANAGER') colorClass = "text-purple-600";
+                        if (role === 'PLACEMENT_LEAD') colorClass = "text-green-600";
+                        
+                        return role ? (
+                          <span className={`font-semibold ml-1 ${colorClass}`}>
+                            ({role})
+                          </span>
+                        ) : null;
+                      })()}
                     </div>
                   )}
                   {company.jd_url && (
@@ -782,7 +749,11 @@ export function TeamManagement() {
                   {company.ctc_lpa || '-'}
                 </td>
                 <td className="px-4 py-3">
-                  {company.pending_status ? (
+                  {company.verification_status && company.verification_status !== 'VERIFIED' && company.verification_status !== 'REJECTED_BY_MANAGER' && company.verification_status !== 'REJECTED_BY_ADMIN' ? (
+                    <span className="text-xs font-semibold rounded-full border px-2.5 py-1 bg-yellow-100 text-yellow-800 border-yellow-200 animate-pulse">
+                      Pending {company.verification_status.replace('PENDING_', '')}
+                    </span>
+                  ) : company.pending_status ? (
                     <span className="text-xs font-semibold rounded-full border px-2.5 py-1 bg-yellow-100 text-yellow-800 border-yellow-200">
                       Pending: {company.pending_status}
                     </span>
@@ -805,8 +776,8 @@ export function TeamManagement() {
                             }
                           }
                         }}
-                        disabled={!canEditCompany}
-                        className={`text-xs font-semibold rounded-full border px-2.5 py-1 focus:outline-none focus:ring-2 ${canEditCompany ? 'cursor-pointer' : 'cursor-default opacity-80'} ${getStatusColor(stagedStatusChanges[company.id] || company.status)}`}
+                        disabled={!isEditableRow}
+                        className={`text-xs font-semibold rounded-full border px-2.5 py-1 focus:outline-none focus:ring-2 ${isEditableRow ? 'cursor-pointer' : 'cursor-default opacity-80'} ${getStatusColor(stagedStatusChanges[company.id] || company.status)}`}
                       >
                         <option value="COLD">COLD</option>
                         <option value="WARM">WARM</option>
@@ -815,23 +786,42 @@ export function TeamManagement() {
                         <option value="DRIVE COMPLETED">DRIVE COMPLETED</option>
                       </select>
                       {stagedStatusChanges[company.id] && !isAdmin && (
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <button
-                            onClick={() => handleStatusChange(company.id, stagedStatusChanges[company.id])}
-                            className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-2 py-0.5 rounded text-[10px] font-bold transition-colors shadow-sm"
-                          >
-                            Get Verified
-                          </button>
-                          <button
-                            onClick={() => setStagedStatusChanges(prev => {
-                              const next = { ...prev };
-                              delete next[company.id];
-                              return next;
-                            })}
-                            className="bg-slate-100 text-slate-600 hover:bg-slate-200 px-2 py-0.5 rounded text-[10px] font-bold transition-colors shadow-sm"
-                          >
-                            Cancel
-                          </button>
+                        <div className="flex flex-col items-center gap-1 mt-0.5">
+                          {(() => {
+                            const val = getVerificationValidation(company, stagedStatusChanges[company.id]);
+                            if (!val.isValid) {
+                              return (
+                                <div className="text-[10px] text-red-500 font-medium text-center" title={val.message}>
+                                  {val.inline}
+                                </div>
+                              );
+                            }
+                            return (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setVerificationCompany(company);
+                                    setVerificationStatus(stagedStatusChanges[company.id]);
+                                    setVerificationModalOpen(true);
+                                  }}
+                                  className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-2 py-0.5 rounded text-[10px] font-bold transition-colors shadow-sm"
+                                  title="Request Verification"
+                                >
+                                  Get Verified
+                                </button>
+                                <button
+                                  onClick={() => setStagedStatusChanges(prev => {
+                                    const next = { ...prev };
+                                    delete next[company.id];
+                                    return next;
+                                  })}
+                                  className="bg-slate-100 text-slate-600 hover:bg-slate-200 px-2 py-0.5 rounded text-[10px] font-bold transition-colors shadow-sm"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
@@ -839,7 +829,7 @@ export function TeamManagement() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    {(((company.status.toUpperCase() === 'HOT' || stagedStatusChanges[company.id] === 'HOT' || company.pending_status === 'HOT') && canEditCompany) || 
+                    {(((company.status.toUpperCase() === 'HOT' || stagedStatusChanges[company.id] === 'HOT' || company.pending_status === 'HOT') && isEditableRow) || 
                       ((company.status.toUpperCase() === 'REGISTERED' || stagedStatusChanges[company.id] === 'REGISTERED' || company.pending_status === 'REGISTERED') && isAdmin)) && (
                       <button onClick={() => handleUploadJD(company.id)} className="flex items-center gap-1 text-xs font-medium bg-secondary text-secondary-foreground px-2 py-1.5 rounded hover:bg-secondary/80">
                         <Upload className="h-3 w-3" />
@@ -848,7 +838,7 @@ export function TeamManagement() {
                     )}
                     {(company.status.toUpperCase() === 'REGISTERED' || stagedStatusChanges[company.id] === 'REGISTERED' || company.pending_status === 'REGISTERED') && (
                       <>
-                        {canEditCompany && (
+                        {isEditableRow && (
                           <>
                             <button onClick={() => {
                               setSelectedCompanyId(company.id);
@@ -875,40 +865,37 @@ export function TeamManagement() {
                         </button>
                       </>
                     )}
-                    {company.status.toUpperCase() === 'DRIVE COMPLETED' && (
+                    {(company.status.toUpperCase() === 'DRIVE COMPLETED' || stagedStatusChanges[company.id] === 'DRIVE COMPLETED' || company.pending_status === 'DRIVE COMPLETED') && (
                       <>
-                        {canEditCompany && (
+                        {isEditableRow && (
                           <>
                             <button onClick={() => {
                               setSelectedCompanyId(company.id);
-                              if (studentInputRef.current) {
-                                studentInputRef.current.setAttribute("data-upload-type", "placed");
-                                studentInputRef.current.click();
-                              }
+                              setDriveDataModalType('attended');
+                              setIsDriveDataModalOpen(true);
                             }} className="flex items-center gap-1 text-xs font-medium bg-blue-100 text-blue-700 px-2 py-1.5 rounded hover:bg-blue-200">
                               <Upload className="h-3 w-3" />
-                              Placed Data
+                              Upload Attended
                             </button>
                             <button onClick={() => {
                               setSelectedCompanyId(company.id);
-                              setShowManualSelectedModal(true);
-                            }} className="flex items-center gap-1 text-xs font-medium bg-blue-100 text-blue-700 px-2 py-1.5 rounded hover:bg-blue-200">
-                              <Plus className="h-3 w-3" />
-                              Selected (Manual)
+                              setDriveDataModalType('placed');
+                              setIsDriveDataModalOpen(true);
+                            }} className="flex items-center gap-1 text-xs font-medium bg-purple-100 text-purple-700 px-2 py-1.5 rounded hover:bg-purple-200">
+                              <Upload className="h-3 w-3" />
+                              Upload Placed
                             </button>
                           </>
                         )}
-                        <button onClick={() => handleDownloadStudents(company.id, company.name)} className="flex items-center gap-1 text-xs font-medium bg-secondary text-secondary-foreground px-2 py-1.5 rounded hover:bg-secondary/80">
-                          <Download className="h-3 w-3" />
-                          Selected ({company.selected_count || 0})
-                        </button>
-                        <button onClick={() => handlePreviewStudents(company.id, company.name, company.selected_count || 0)} className="flex items-center gap-1 text-xs font-medium bg-white border border-slate-200 text-slate-700 px-2 py-1.5 rounded hover:bg-slate-50 shadow-sm">
-                          <Eye className="h-3 w-3" />
-                          Placed Students
-                        </button>
+                        {(company.attendedCount > 0 && company.placedCount > 0) && (
+                           <button onClick={() => fetchCompareData(company.id)} className="flex items-center gap-1 text-xs font-medium bg-emerald-100 text-emerald-700 px-2 py-1.5 rounded hover:bg-emerald-200 shadow-sm">
+                             <Eye className="h-3 w-3" />
+                             View Summary
+                           </button>
+                        )}
                       </>
                     )}
-                    {canEditCompany && (
+                    {isEditableRow && (
                       <>
                         <button onClick={() => { setEditCompany(company); setShowEditCompanyModal(true); }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded transition-colors" title="Edit Company">
                           <Edit2 className="h-4 w-4" />
@@ -923,7 +910,8 @@ export function TeamManagement() {
                   </div>
                 </td>
               </tr>
-            ))}
+            );
+          })}
             {filteredCompanies.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
@@ -935,7 +923,7 @@ export function TeamManagement() {
         </table>
         </div>
       </div>
-      )}
+
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
@@ -1724,6 +1712,127 @@ export function TeamManagement() {
             </form>
           </div>
         </div>
+      )}
+      {/* Verification Request Modal */}
+      {verificationModalOpen && verificationCompany && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+              <h2 className="text-lg font-bold text-slate-800">Confirm Verification Request</h2>
+              <button onClick={() => setVerificationModalOpen(false)} className="text-slate-400 hover:text-slate-600 rounded-full p-1 hover:bg-slate-200 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-slate-600">
+                You are requesting verification to move <strong>{verificationCompany.name}</strong> to status <span className="font-bold text-indigo-700">{verificationStatus}</span>.
+              </p>
+              
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">
+                  Remarks / Notes for Manager <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <textarea
+                  value={verificationRemarks}
+                  onChange={(e) => setVerificationRemarks(e.target.value)}
+                  placeholder="E.g., Added JD and updated CTC as requested..."
+                  className="w-full h-24 rounded-md border border-slate-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+            
+            <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
+              <button
+                onClick={() => setVerificationModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleVerificationRequest}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+              >
+                Submit Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Compare Data Modal */}
+      {showCompareModal && compareData && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+              <h2 className="text-lg font-bold text-slate-800">Drive Data Summary</h2>
+              <button onClick={() => setShowCompareModal(false)} className="text-slate-400 hover:text-slate-600 rounded-full p-1 hover:bg-slate-200 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-6">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                  <div className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Registered</div>
+                  <div className="text-3xl font-bold text-indigo-600">{compareData.registered}</div>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                  <div className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Attended</div>
+                  <div className="text-3xl font-bold text-indigo-600">{compareData.attended}</div>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                  <div className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Placed</div>
+                  <div className="text-3xl font-bold text-indigo-600">{compareData.placed}</div>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <h3 className="font-semibold text-slate-800 border-b pb-2">Data Discrepancies</h3>
+                
+                {compareData.notAttended > 0 ? (
+                  <div className="p-3 bg-amber-50 text-amber-800 rounded border border-amber-200 text-sm">
+                    <strong>{compareData.notAttended}</strong> students registered but did not attend.
+                  </div>
+                ) : (
+                  <div className="p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
+                    All registered students attended.
+                  </div>
+                )}
+                
+                {compareData.attendedButNotPlaced > 0 ? (
+                  <div className="p-3 bg-blue-50 text-blue-800 rounded border border-blue-200 text-sm">
+                    <strong>{compareData.attendedButNotPlaced}</strong> students attended but were not placed.
+                  </div>
+                ) : (
+                  <div className="p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
+                    All attended students were placed!
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
+              <button
+                onClick={() => setShowCompareModal(false)}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedCompanyId && (
+        <DriveDataUploadModal
+          isOpen={isDriveDataModalOpen}
+          onClose={() => { setIsDriveDataModalOpen(false); setSelectedCompanyId(null); }}
+          companyId={selectedCompanyId}
+          companyName={companies.find(c => c.id === selectedCompanyId)?.name || ''}
+          type={driveDataModalType}
+          onSuccess={() => fetchCompanies()}
+        />
       )}
     </div>
   );
