@@ -10,6 +10,7 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
   
   // Parallax tracking
   const tiltRef = useRef<HTMLDivElement>(null);
@@ -54,21 +55,52 @@ export function Login() {
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError("");
     
-    // Simulate network delay for premium feel
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const em = email.toLowerCase();
-    
-    // Set a dummy token so the backend can identify the user
-    localStorage.setItem('token', `dummy_token_${em}`);
-    
-    if (em.includes("manager")) {
-      navigate("/manager");
-    } else if (em.includes("lead") || em.includes("leed")) {
-      navigate("/placement_lead");
-    } else {
-      navigate("/admin");
+    try {
+      // Need to use URLSearchParams because backend expects OAuth2PasswordRequestForm
+      const formData = new URLSearchParams();
+      formData.append("username", email);
+      formData.append("password", password);
+
+      // We use standard fetch here or axios api instance
+      // Assuming api instance from "../../lib/api" is available? Wait, import it.
+      // Let's import it at the top
+      
+      const res = await fetch("http://localhost:8000/api/v1/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: formData,
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 404 || res.status === 403) {
+          setError(data.detail || "Login failed");
+        } else {
+          setError("Login failed. Please try again.");
+        }
+        return;
+      }
+      
+      // success
+      localStorage.setItem("token", data.access_token);
+      
+      const role = data.user?.role?.toUpperCase() || "ADMIN";
+      if (role === "MANAGER") {
+        navigate("/manager");
+      } else if (role === "PLACEMENT_LEAD") {
+        navigate("/placement_lead");
+      } else {
+        navigate("/admin");
+      }
+    } catch (err: any) {
+      setError(err.message || "Network error. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -189,7 +221,12 @@ export function Login() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleFormSubmit} className="space-y-6 mt-8">
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/50 text-red-500 text-sm px-4 py-3 rounded-xl mb-6 flex items-center justify-center font-medium">
+              {error}
+            </div>
+          )}
+          <form onSubmit={handleFormSubmit} className="space-y-6 mt-4">
             <div className="space-y-2 stagger-2">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
               <div className="relative group">

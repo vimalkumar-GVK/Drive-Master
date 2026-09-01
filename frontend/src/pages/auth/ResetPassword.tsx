@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Lock, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Lock, Loader2, CheckCircle2 } from "lucide-react";
 import api from "../../lib/api";
 
 export function ResetPassword() {

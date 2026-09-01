@@ -81,7 +81,7 @@ export function VerifyOtp() {
     setIsLoading(true);
     setError("");
     try {
-      const res = await api.post("/auth/forgot-password", { email });
+      await api.post("/auth/forgot-password", { email });
       setTimeLeft(300);
       alert("A new OTP has been sent to your email.");
     } catch (err: any) {
@@ -110,7 +110,7 @@ export function VerifyOtp() {
             {otp.map((digit, i) => (
               <input
                 key={i}
-                ref={el => inputRefs.current[i] = el}
+                ref={(el) => { inputRefs.current[i] = el; }}
                 type="text"
                 maxLength={1}
                 value={digit}

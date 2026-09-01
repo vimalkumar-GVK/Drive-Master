@@ -7,7 +7,10 @@ from datetime import datetime
 
 router = APIRouter()
 
-@router.post("/signup", response_model=User)
+from app.api.deps import require_role
+from app.models.user import RoleEnum
+
+@router.post("/signup", response_model=User, dependencies=[Depends(require_role([RoleEnum.ADMIN]))])
 async def signup(user_in: UserCreate):
     db = get_database()
     
@@ -31,16 +34,27 @@ async def signup(user_in: UserCreate):
 @router.post("/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     db = get_database()
-    user = await db["users"].find_one({"email": form_data.username})
+    email = form_data.username.lower().strip()
     
-    if not user or not verify_password(form_data.password, user["hashed_password"]):
+    # STRICT CHECK - User must exist in DB
+    user = await db["users"].find_one({"email": email})
+    if not user:
+        print(f"[LOGIN BLOCKED] Unknown user attempt: {email}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Incorrect email or password"
+            status_code=401, 
+            detail="Access denied. This email is not registered. Contact IT Support."
         )
+    
+    # Check if user is active
+    if user.get("isActive") is False:
+        raise HTTPException(status_code=403, detail="Account deactivated. Contact Admin.")
+    
+    # Verify password
+    if not verify_password(form_data.password, user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
         
     access_token = create_access_token(subject=user["email"])
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "user": {"email": email, "role": user.get("role", "STUDENT"), "name": user.get("full_name")}}
 
 from pydantic import BaseModel, EmailStr
 import random
@@ -105,7 +119,13 @@ async def forgot_password(request: ForgotPasswordRequest, background_tasks: Back
     db = get_database()
     user = await db["users"].find_one({"email": email})
     if not user:
-        return {"message": "If that email exists, an OTP has been sent."}
+        print(f"[FORGOT PASSWORD BLOCKED] Unknown email: {email}")
+        import asyncio
+        await asyncio.sleep(random.uniform(0.5, 1.5)) # Prevent timing attack
+        raise HTTPException(
+            status_code=404,
+            detail="Email not found in our records. Only registered placement team members can reset password. Contact IT Support."
+        )
     
     # Rate limit: max 3 requests per hour
     now = datetime.utcnow()

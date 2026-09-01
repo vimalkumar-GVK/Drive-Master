@@ -20,7 +20,7 @@ export function ForgotPassword() {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000); // 15 sec max
       
-      const res = await api.post("/auth/forgot-password", { email }, { signal: controller.signal });
+      await api.post("/auth/forgot-password", { email }, { signal: controller.signal });
       clearTimeout(timeout);
 
       setMessage("OTP sent to your Gmail! Check inbox (and spam). Valid 5 minutes.");
@@ -28,7 +28,11 @@ export function ForgotPassword() {
         navigate(`/verify-otp?email=${encodeURIComponent(email)}`);
       }, 1500);
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Failed to send OTP. Please try again.");
+      if (err.response?.status === 404) {
+        setError("This email is not registered in RGU Drive Master. Only Admin-created users can reset password. Contact IT Support.");
+      } else {
+        setError(err.response?.data?.detail || "Failed to send OTP. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
